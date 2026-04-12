@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Lead {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  business  String?
+  message   String?
+  source    String   @default("website")
+  status    String   @default("new") // new, contacted, qualified, converted, lost
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id          String    @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  business    String
+  website     String?
+  plan        String    @default("SignalCore") // SignalCore, SearchVault, SmartNav, SearchSync
+  status      String    @default("active") // active, paused, churned
+  monthlyRate Float     @default(0)
+  startDate   DateTime  @default(now())
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  invoices    Invoice[]
+}
+
+model Invoice {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  amount    Float
+  status    String   @default("pending") // pending, paid, overdue
+  dueDate   DateTime
+  paidAt    DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmailLog {
+  id          String   @id @default(cuid())
+  to          String
+  subject     String
+  body        String
+  status      String   @default("sent") // sent, failed, bounced
+  resendId    String?
+  createdAt   DateTime @default(now())
+}
+
+model Service {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String
+  price       Float
+  features    String  // JSON string of features array
+  isActive    Boolean @default(true)
+}

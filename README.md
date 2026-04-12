@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kootenay Signal Admin
+
+Admin dashboard for managing the Kootenay Signal digital agency operations.
+
+## Features
+
+- **Dashboard** — Overview of leads, clients, revenue, and email activity
+- **Lead Management** — Track, filter, and manage incoming leads with status workflows
+- **Client Management** — Manage active clients with plan tracking and MRR visibility
+- **Invoice System** — Create, track, and manage invoices per client
+- **Email (Resend)** — Compose and send emails via Resend API with full send history
+- **Service Management** — Configure service offerings (SignalCore, SearchVault, SmartNav, SearchSync)
+- **Settings** — Profile management, password changes, environment status
+- **Webhook API** — Public endpoint for your main site's contact form to submit leads
+
+## Tech Stack
+
+- **Next.js 16** (App Router, TypeScript)
+- **Tailwind CSS** (dark theme matching the agency brand)
+- **Prisma + SQLite** (lightweight, zero-config database)
+- **Resend** (email sending)
+- **JWT Auth** (cookie-based, httpOnly)
 
 ## Getting Started
 
-First, run the development server:
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Set up environment
+
+Configure `.env`:
+
+```env
+DATABASE_URL="file:./dev.db"
+RESEND_API_KEY="re_your_api_key_here"
+AUTH_SECRET="generate-a-random-secret"
+FROM_EMAIL="Kootenay Signal <admin@yourdomain.com>"
+```
+
+### 3. Initialize database
+
+```bash
+npx prisma migrate dev
+npx tsx prisma/seed.ts
+```
+
+### 4. Run the dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Default Login
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Email:** admin@kootenaysignal.com
+- **Password:** admin123
 
-## Learn More
+> Change this immediately in Settings after first login.
 
-To learn more about Next.js, take a look at the following resources:
+## API Endpoints
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/auth/login` | No | Login |
+| POST | `/api/auth/logout` | Yes | Logout |
+| GET/PATCH | `/api/auth/me` | Yes | Get/update profile |
+| POST | `/api/auth/password` | Yes | Change password |
+| POST | `/api/auth/setup` | No* | Initial admin setup |
+| GET/POST | `/api/leads` | Yes | List/create leads |
+| GET/PATCH/DELETE | `/api/leads/[id]` | Yes | Manage individual lead |
+| GET/POST | `/api/clients` | Yes | List/create clients |
+| GET/PATCH/DELETE | `/api/clients/[id]` | Yes | Manage individual client |
+| GET/POST | `/api/invoices` | Yes | List/create invoices |
+| PATCH/DELETE | `/api/invoices/[id]` | Yes | Manage individual invoice |
+| GET/POST | `/api/email` | Yes | Email history / send email |
+| GET/POST | `/api/services` | Yes | List/create services |
+| PATCH/DELETE | `/api/services/[id]` | Yes | Manage individual service |
+| POST | `/api/webhooks/leads` | No | Public webhook for contact form |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+\* Setup only works when no users exist
 
-## Deploy on Vercel
+## Webhook Integration
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Add this to your main Kootenay Signal site's contact form:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```js
+fetch('https://your-admin-domain.com/api/webhooks/leads', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ name, email, phone, business, message })
+});
+```
