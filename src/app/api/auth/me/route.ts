@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function GET() {
   const session = await getSession();
@@ -14,14 +14,16 @@ export async function PATCH(request: NextRequest) {
 
   const { name, email } = await request.json();
 
-  const user = await prisma.user.update({
-    where: { id: session.id },
-    data: {
-      ...(name && { name }),
-      ...(email && { email }),
-    },
-    select: { id: true, email: true, name: true, role: true },
-  });
+  const updateData: Record<string, string> = {};
+  if (name) updateData.name = name;
+  if (email) updateData.email = email;
+
+  const { data: user } = await supabase
+    .from("User")
+    .update(updateData)
+    .eq("id", session.id)
+    .select("id, email, name, role")
+    .single();
 
   return NextResponse.json(user);
 }

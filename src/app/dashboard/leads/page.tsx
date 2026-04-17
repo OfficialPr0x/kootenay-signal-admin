@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { IconPlus, IconSearch, IconEdit, IconTrash, IconX } from "@/components/icons";
 
 interface Lead {
   id: string;
@@ -16,6 +17,13 @@ interface Lead {
 }
 
 const STATUS_OPTIONS = ["new", "contacted", "qualified", "converted", "lost"];
+const STATUS_STYLES: Record<string, string> = {
+  new: "badge-info",
+  contacted: "badge-warning",
+  qualified: "badge-accent",
+  converted: "badge-success",
+  lost: "badge-danger",
+};
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -81,38 +89,34 @@ export default function LeadsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between page-header">
         <div>
-          <h2 className="text-2xl font-bold">Leads</h2>
-          <p className="text-muted text-sm mt-1">Manage incoming leads and inquiries</p>
+          <h2 className="page-title">Leads</h2>
+          <p className="page-subtitle">Manage incoming leads and inquiries</p>
         </div>
-        <button
-          onClick={() => { setEditingLead(null); setShowForm(true); }}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition cursor-pointer"
-        >
-          + Add Lead
+        <button onClick={() => { setEditingLead(null); setShowForm(true); }} className="btn-primary">
+          <IconPlus size={16} />
+          Add Lead
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        <input
-          type="text"
-          placeholder="Search leads..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="px-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder-muted focus:outline-none focus:border-accent"
-        />
-        <div className="flex gap-1 bg-card border border-border rounded-lg p-1">
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="relative flex-1 max-w-xs">
+          <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <input
+            type="text"
+            placeholder="Search leads..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input-field pl-9"
+          />
+        </div>
+        <div className="tab-list">
           {["all", ...STATUS_OPTIONS].map((s) => (
             <button
               key={s}
               onClick={() => setFilter(s)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
-                filter === s
-                  ? "bg-accent text-white"
-                  : "text-muted hover:text-foreground"
-              }`}
+              className={`tab-item ${filter === s ? "active" : ""}`}
             >
               {s}
             </button>
@@ -120,55 +124,51 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* Lead Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">
-              {editingLead ? "Edit Lead" : "Add New Lead"}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4">
+          <div className="panel w-full max-w-lg max-h-[90vh] overflow-y-auto fade-in">
+            <div className="panel-header">
+              <h3 className="text-[15px] font-semibold">
+                {editingLead ? "Edit Lead" : "Add New Lead"}
+              </h3>
+              <button onClick={() => { setShowForm(false); setEditingLead(null); }} className="text-muted hover:text-foreground transition cursor-pointer">
+                <IconX size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="panel-body space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-muted mb-1">Name *</label>
-                  <input name="name" required defaultValue={editingLead?.name}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:border-accent" />
+                  <label className="block text-[12px] font-medium text-muted mb-1.5">Name *</label>
+                  <input name="name" required defaultValue={editingLead?.name} className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-sm text-muted mb-1">Email *</label>
-                  <input name="email" type="email" required defaultValue={editingLead?.email}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:border-accent" />
+                  <label className="block text-[12px] font-medium text-muted mb-1.5">Email *</label>
+                  <input name="email" type="email" required defaultValue={editingLead?.email} className="input-field" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-muted mb-1">Phone</label>
-                  <input name="phone" defaultValue={editingLead?.phone || ""}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:border-accent" />
+                  <label className="block text-[12px] font-medium text-muted mb-1.5">Phone</label>
+                  <input name="phone" defaultValue={editingLead?.phone || ""} className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-sm text-muted mb-1">Business</label>
-                  <input name="business" defaultValue={editingLead?.business || ""}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:border-accent" />
+                  <label className="block text-[12px] font-medium text-muted mb-1.5">Business</label>
+                  <input name="business" defaultValue={editingLead?.business || ""} className="input-field" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm text-muted mb-1">Message</label>
-                <textarea name="message" rows={3} defaultValue={editingLead?.message || ""}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:border-accent resize-none" />
+                <label className="block text-[12px] font-medium text-muted mb-1.5">Message</label>
+                <textarea name="message" rows={3} defaultValue={editingLead?.message || ""} className="input-field resize-none" />
               </div>
               <div>
-                <label className="block text-sm text-muted mb-1">Notes</label>
-                <textarea name="notes" rows={2} defaultValue={editingLead?.notes || ""}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:border-accent resize-none" />
+                <label className="block text-[12px] font-medium text-muted mb-1.5">Notes</label>
+                <textarea name="notes" rows={2} defaultValue={editingLead?.notes || ""} className="input-field resize-none" />
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="submit"
-                  className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition cursor-pointer">
+                <button type="submit" className="btn-primary">
                   {editingLead ? "Update" : "Create"} Lead
                 </button>
-                <button type="button" onClick={() => { setShowForm(false); setEditingLead(null); }}
-                  className="px-4 py-2 border border-border text-muted hover:text-foreground rounded-lg text-sm transition cursor-pointer">
+                <button type="button" onClick={() => { setShowForm(false); setEditingLead(null); }} className="btn-ghost">
                   Cancel
                 </button>
               </div>
@@ -177,58 +177,59 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {/* Leads Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="panel">
         {loading ? (
-          <p className="p-8 text-center text-muted">Loading...</p>
+          <p className="px-5 py-12 text-center text-muted text-[13px]">Loading...</p>
         ) : leads.length === 0 ? (
-          <p className="p-8 text-center text-muted">No leads found</p>
+          <p className="px-5 py-12 text-center text-muted text-[13px]">No leads found</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="brand-table">
               <thead>
-                <tr className="border-b border-border text-muted text-left">
-                  <th className="px-6 py-4 font-medium">Name</th>
-                  <th className="px-6 py-4 font-medium">Email</th>
-                  <th className="px-6 py-4 font-medium">Business</th>
-                  <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium">Date</th>
-                  <th className="px-6 py-4 font-medium">Actions</th>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Business</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {leads.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-card-hover transition">
-                    <td className="px-6 py-4 font-medium">{lead.name}</td>
-                    <td className="px-6 py-4 text-muted">{lead.email}</td>
-                    <td className="px-6 py-4 text-muted">{lead.business || "—"}</td>
-                    <td className="px-6 py-4">
+                  <tr key={lead.id}>
+                    <td className="font-medium text-foreground">{lead.name}</td>
+                    <td>{lead.email}</td>
+                    <td>{lead.business || "\u2014"}</td>
+                    <td>
                       <select
                         value={lead.status}
                         onChange={(e) => handleStatusChange(lead.id, e.target.value)}
-                        className="bg-background border border-border rounded px-2 py-1 text-xs cursor-pointer focus:outline-none focus:border-accent"
+                        className="bg-background border border-border rounded-md px-2 py-1.5 text-[12px] cursor-pointer focus:outline-none focus:border-accent text-muted-foreground"
                       >
                         {STATUS_OPTIONS.map((s) => (
                           <option key={s} value={s}>{s}</option>
                         ))}
                       </select>
                     </td>
-                    <td className="px-6 py-4 text-muted text-xs">
+                    <td className="text-muted text-[12px]">
                       {new Date(lead.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2">
+                    <td>
+                      <div className="flex items-center gap-1">
                         <button
                           onClick={() => { setEditingLead(lead); setShowForm(true); }}
-                          className="text-accent hover:text-accent-hover text-xs cursor-pointer"
+                          className="p-1.5 rounded-md text-muted hover:text-accent hover:bg-accent-dim transition cursor-pointer"
+                          title="Edit"
                         >
-                          Edit
+                          <IconEdit size={14} />
                         </button>
                         <button
                           onClick={() => handleDelete(lead.id)}
-                          className="text-danger hover:text-red-300 text-xs cursor-pointer"
+                          className="p-1.5 rounded-md text-muted hover:text-danger hover:bg-danger-dim transition cursor-pointer"
+                          title="Delete"
                         >
-                          Delete
+                          <IconTrash size={14} />
                         </button>
                       </div>
                     </td>

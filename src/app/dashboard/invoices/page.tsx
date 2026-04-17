@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { IconPlus, IconTrash, IconX } from "@/components/icons";
 
 interface Client {
   name: string;
@@ -84,120 +85,113 @@ export default function InvoicesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between page-header">
         <div>
-          <h2 className="text-2xl font-bold">Invoices</h2>
-          <p className="text-muted text-sm mt-1">
-            Paid: ${totalPaid.toLocaleString()} · Pending: ${totalPending.toLocaleString()}
-          </p>
+          <h2 className="page-title">Invoices</h2>
+          <div className="flex items-center gap-4 mt-1">
+            <span className="text-[13px] text-success">Paid: ${totalPaid.toLocaleString()}</span>
+            <span className="text-[13px] text-warning">Pending: ${totalPending.toLocaleString()}</span>
+          </div>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition cursor-pointer"
-        >
-          + Create Invoice
+        <button onClick={() => setShowForm(true)} className="btn-primary">
+          <IconPlus size={16} />
+          Create Invoice
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-1 bg-card border border-border rounded-lg p-1 mb-6 w-fit">
+      <div className="tab-list w-fit mb-6">
         {["all", "pending", "paid", "overdue"].map((s) => (
           <button
             key={s}
             onClick={() => setFilter(s)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
-              filter === s ? "bg-accent text-white" : "text-muted hover:text-foreground"
-            }`}
+            className={`tab-item ${filter === s ? "active" : ""}`}
           >
             {s}
           </button>
         ))}
       </div>
 
-      {/* Invoice Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Create Invoice</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4">
+          <div className="panel w-full max-w-md fade-in">
+            <div className="panel-header">
+              <h3 className="text-[15px] font-semibold">Create Invoice</h3>
+              <button onClick={() => setShowForm(false)} className="text-muted hover:text-foreground transition cursor-pointer">
+                <IconX size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="panel-body space-y-4">
               <div>
-                <label className="block text-sm text-muted mb-1">Client *</label>
-                <select name="clientId" required
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:border-accent cursor-pointer">
+                <label className="block text-[12px] font-medium text-muted mb-1.5">Client *</label>
+                <select name="clientId" required className="input-field cursor-pointer">
                   <option value="">Select client</option>
                   {clients.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name} – {c.business}</option>
+                    <option key={c.id} value={c.id}>{c.name} \u2013 {c.business}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-muted mb-1">Amount ($) *</label>
-                <input name="amount" type="number" step="0.01" required
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:border-accent" />
+                <label className="block text-[12px] font-medium text-muted mb-1.5">Amount ($) *</label>
+                <input name="amount" type="number" step="0.01" required className="input-field" />
               </div>
               <div>
-                <label className="block text-sm text-muted mb-1">Due Date *</label>
-                <input name="dueDate" type="date" required
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:border-accent" />
+                <label className="block text-[12px] font-medium text-muted mb-1.5">Due Date *</label>
+                <input name="dueDate" type="date" required className="input-field" />
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="submit"
-                  className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition cursor-pointer">
-                  Create Invoice
-                </button>
-                <button type="button" onClick={() => setShowForm(false)}
-                  className="px-4 py-2 border border-border text-muted hover:text-foreground rounded-lg text-sm transition cursor-pointer">
-                  Cancel
-                </button>
+                <button type="submit" className="btn-primary">Create Invoice</button>
+                <button type="button" onClick={() => setShowForm(false)} className="btn-ghost">Cancel</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Invoices Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="panel">
         {loading ? (
-          <p className="p-8 text-center text-muted">Loading...</p>
+          <p className="px-5 py-12 text-center text-muted text-[13px]">Loading...</p>
         ) : invoices.length === 0 ? (
-          <p className="p-8 text-center text-muted">No invoices found</p>
+          <p className="px-5 py-12 text-center text-muted text-[13px]">No invoices found</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="brand-table">
               <thead>
-                <tr className="border-b border-border text-muted text-left">
-                  <th className="px-6 py-4 font-medium">Client</th>
-                  <th className="px-6 py-4 font-medium">Amount</th>
-                  <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium">Due Date</th>
-                  <th className="px-6 py-4 font-medium">Actions</th>
+                <tr>
+                  <th>Client</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Due Date</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {invoices.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-card-hover transition">
-                    <td className="px-6 py-4">
-                      <p className="font-medium">{inv.client.name}</p>
-                      <p className="text-muted text-xs">{inv.client.business}</p>
+                  <tr key={inv.id}>
+                    <td>
+                      <p className="font-medium text-foreground">{inv.client.name}</p>
+                      <p className="text-[11px] text-muted">{inv.client.business}</p>
                     </td>
-                    <td className="px-6 py-4 font-mono font-medium">${inv.amount.toLocaleString()}</td>
-                    <td className="px-6 py-4">
+                    <td className="font-mono font-medium text-foreground">${inv.amount.toLocaleString()}</td>
+                    <td>
                       <select
                         value={inv.status}
                         onChange={(e) => handleStatusChange(inv.id, e.target.value)}
-                        className="bg-background border border-border rounded px-2 py-1 text-xs cursor-pointer focus:outline-none focus:border-accent"
+                        className="bg-background border border-border rounded-md px-2 py-1.5 text-[12px] cursor-pointer focus:outline-none focus:border-accent text-muted-foreground"
                       >
                         <option value="pending">pending</option>
                         <option value="paid">paid</option>
                         <option value="overdue">overdue</option>
                       </select>
                     </td>
-                    <td className="px-6 py-4 text-muted text-xs">
+                    <td className="text-muted text-[12px]">
                       {new Date(inv.dueDate).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4">
+                    <td>
                       <button onClick={() => handleDelete(inv.id)}
-                        className="text-danger hover:text-red-300 text-xs cursor-pointer">Delete</button>
+                        className="p-1.5 rounded-md text-muted hover:text-danger hover:bg-danger-dim transition cursor-pointer"
+                        title="Delete">
+                        <IconTrash size={14} />
+                      </button>
                     </td>
                   </tr>
                 ))}

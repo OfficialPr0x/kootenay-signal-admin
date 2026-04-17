@@ -1,82 +1,125 @@
-import { prisma } from "@/lib/db";
+import { supabase } from "@/lib/db";
 import Link from "next/link";
 
 async function getStats() {
-  const [leadCount, clientCount, activeClients, recentLeads, revenue, emailsSent] =
+  const [leadsRes, clientsRes, activeClientsRes, recentLeadsRes, invoicesRes, emailsSentRes] =
     await Promise.all([
-      prisma.lead.count(),
-      prisma.client.count(),
-      prisma.client.count({ where: { status: "active" } }),
-      prisma.lead.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
-      prisma.invoice.aggregate({
-        where: { status: "paid" },
-        _sum: { amount: true },
-      }),
-      prisma.emailLog.count(),
+      supabase.from("Lead").select("*", { count: "exact", head: true }),
+      supabase.from("Client").select("*", { count: "exact", head: true }),
+      supabase.from("Client").select("*", { count: "exact", head: true }).eq("status", "active"),
+      supabase.from("Lead").select("*").order("createdAt", { ascending: false }).limit(5),
+      supabase.from("Invoice").select("amount").eq("status", "paid"),
+      supabase.from("EmailLog").select("*", { count: "exact", head: true }),
     ]);
 
-  return { leadCount, clientCount, activeClients, recentLeads, revenue: revenue._sum.amount || 0, emailsSent };
+  const revenue = (invoicesRes.data || []).reduce((sum: number, i: Record<string, number>) => sum + (i.amount || 0), 0);
+
+  return {
+    leadCount: leadsRes.count || 0,
+    clientCount: clientsRes.count || 0,
+    activeClients: activeClientsRes.count || 0,
+    recentLeads: recentLeadsRes.data || [],
+    revenue,
+    emailsSent: emailsSentRes.count || 0,
+  };
 }
 
 export default async function DashboardPage() {
   const stats = await getStats();
 
   const statCards = [
-    { label: "Total Leads", value: stats.leadCount, color: "text-accent", href: "/dashboard/leads" },
-    { label: "Active Clients", value: stats.activeClients, color: "text-success", href: "/dashboard/clients" },
-    { label: "Total Revenue", value: `$${stats.revenue.toLocaleString()}`, color: "text-warning", href: "/dashboard/invoices" },
-    { label: "Emails Sent", value: stats.emailsSent, color: "text-blue-400", href: "/dashboard/email" },
+    {
+      label: "Total Leads",
+      value: stats.leadCount,
+      accent: "text-accent",
+      bg: "bg-accent/8",
+      href: "/dashboard/leads",
+      indicator: "border-l-accent",
+    },
+    {
+      label: "Active Clients",
+      value: stats.activeClients,
+      accent: "text-success",
+      bg: "bg-success/8",
+      href: "/dashboard/clients",
+      indicator: "border-l-success",
+    },
+    {
+      label: "Total Revenue",
+      value: `$${stats.revenue.toLocaleString()}`,
+      accent: "text-warning",
+      bg: "bg-warning/8",
+      href: "/dashboard/invoices",
+      indicator: "border-l-warning",
+    },
+    {
+      label: "Emails Sent",
+      value: stats.emailsSent,
+      accent: "text-info",
+      bg: "bg-info/8",
+      href: "/dashboard/email",
+      indicator: "border-l-info",
+    },
   ];
 
   return (
     <div>
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold">Dashboard</h2>
-        <p className="text-muted text-sm mt-1">Overview of your agency operations</p>
+      <div className="page-header">
+        <h2 className="page-title">Dashboard</h2>
+        <p className="page-subtitle">Overview of your agency operations</p>
       </div>
 
-      {/* Stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {statCards.map((stat) => (
-          <Link
-            key={stat.label}
-            href={stat.href}
-            className="bg-card border border-border rounded-xl p-6 hover:border-accent/30 transition group"
-          >
-            <p className="text-muted text-sm">{stat.label}</p>
-            <p className={`text-3xl font-bold mt-2 ${stat.color} group-hover:opacity-80 transition`}>
-              {stat.value}
-            </p>
+          <Link key={stat.label} href={stat.href} className="stat-card rounded-xl border-l-2 border-l-transparent hover:border-l-2 group" style={{ borderLeftColor: 'transparent' }}>
+            <div className={`stat-card rounded-xl group-hover:bg-card-hover`}>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted">{stat.label}</span>
+                <span className={`w-2 h-2 rounded-full ${stat.bg} ${stat.accent}`} style={{ boxShadow: '0 0 6px currentColor' }} />
+              </div>
+              <p className={`text-[28px] font-semibold tracking-tight leading-none ${stat.accent}`}>
+                {stat.value}
+              </p>
+            </div>
           </Link>
         ))}
       </div>
 
-      {/* Recent leads */}
-      <div className="bg-card border border-border rounded-xl">
-        <div className="flex items-center justify-between p-6 border-b border-border">
-          <h3 className="font-semibold">Recent Leads</h3>
-          <Link href="/dashboard/leads" className="text-accent text-sm hover:underline">
-            View all →
+      <div className="panel">
+        <div className="panel-header">
+          <h3 className="text-[14px] font-semibold">Recent Leads</h3>
+          <Link href="/dashboard/leads" className="text-accent text-[12px] font-medium hover:text-accent-hover transition">
+            View all
           </Link>
         </div>
-        <div className="divide-y divide-border">
+        <div>
           {stats.recentLeads.length === 0 ? (
-            <p className="p-6 text-muted text-sm">No leads yet</p>
+            <p className="px-5 py-8 text-muted text-[13px] text-center">No leads yet</p>
           ) : (
-            stats.recentLeads.map((lead) => (
-              <div key={lead.id} className="p-4 px-6 flex items-center justify-between">
-                <div>
-                  <p className="font-medium">{lead.name}</p>
-                  <p className="text-muted text-sm">{lead.email}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={lead.status} />
-                  <span className="text-muted text-xs">
-                    {new Date(lead.createdAt).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-            ))
+            <table className="brand-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.recentLeads.map((lead) => (
+                  <tr key={lead.id}>
+                    <td className="font-medium text-foreground">{lead.name}</td>
+                    <td>{lead.email}</td>
+                    <td>
+                      <StatusBadge status={lead.status} />
+                    </td>
+                    <td className="text-muted">
+                      {new Date(lead.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
@@ -85,23 +128,19 @@ export default async function DashboardPage() {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    new: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    contacted: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-    qualified: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-    converted: "bg-green-500/10 text-green-400 border-green-500/20",
-    lost: "bg-red-500/10 text-red-400 border-red-500/20",
-    active: "bg-green-500/10 text-green-400 border-green-500/20",
-    paused: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-    churned: "bg-red-500/10 text-red-400 border-red-500/20",
+  const styles: Record<string, string> = {
+    new: "badge-info",
+    contacted: "badge-warning",
+    qualified: "badge-accent",
+    converted: "badge-success",
+    lost: "badge-danger",
+    active: "badge-success",
+    paused: "badge-warning",
+    churned: "badge-danger",
   };
 
   return (
-    <span
-      className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
-        colors[status] || "bg-gray-500/10 text-gray-400 border-gray-500/20"
-      }`}
-    >
+    <span className={`badge ${styles[status] || "badge-muted"}`}>
       {status}
     </span>
   );

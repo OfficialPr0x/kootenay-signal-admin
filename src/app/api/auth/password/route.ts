@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, verifyPassword, hashPassword } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { id: session.id } });
+  const { data: user } = await supabase.from("User").select("*").eq("id", session.id).single();
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   const valid = await verifyPassword(currentPassword, user.password);
@@ -24,10 +24,7 @@ export async function POST(request: NextRequest) {
 
   const hashed = await hashPassword(newPassword);
 
-  await prisma.user.update({
-    where: { id: session.id },
-    data: { password: hashed },
-  });
+  await supabase.from("User").update({ password: hashed }).eq("id", session.id);
 
   return NextResponse.json({ success: true });
 }

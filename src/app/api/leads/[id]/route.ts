@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const lead = await prisma.lead.findUnique({ where: { id } });
+  const { data: lead } = await supabase.from("Lead").select("*").eq("id", id).single();
   if (!lead) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(lead);
 }
@@ -18,11 +18,8 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json();
 
-  const lead = await prisma.lead.update({
-    where: { id },
-    data: body,
-  });
-
+  const { data: lead, error } = await supabase.from("Lead").update(body).eq("id", id).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(lead);
 }
 
@@ -31,6 +28,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  await prisma.lead.delete({ where: { id } });
+  await supabase.from("Lead").delete().eq("id", id);
   return NextResponse.json({ success: true });
 }

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function GET() {
-  const services = await prisma.service.findMany();
+  const { data: services } = await supabase.from("Service").select("*");
   return NextResponse.json(services);
 }
 
@@ -14,15 +14,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Name, description, and price are required" }, { status: 400 });
   }
 
-  const service = await prisma.service.create({
-    data: {
+  const { data: service, error } = await supabase
+    .from("Service")
+    .insert({
       name,
       description,
       price,
       features: JSON.stringify(features || []),
       isActive: isActive !== false,
-    },
-  });
+    })
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json(service, { status: 201 });
 }

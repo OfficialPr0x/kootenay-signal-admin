@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { prisma } from "./db";
+import { supabase } from "./db";
 import bcrypt from "bcryptjs";
 
 const secret = new TextEncoder().encode(process.env.AUTH_SECRET || "fallback-secret");
@@ -37,10 +37,21 @@ export async function getSession() {
   const payload = await verifyToken(token);
   if (!payload) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-    select: { id: true, email: true, name: true, role: true },
-  });
+  // Master admin login via env
+  if (payload.userId === "master-admin") {
+    return {
+      id: "master-admin",
+      email: process.env.ADMIN_EMAIL || "admin@kootenaysignal.com",
+      name: "Jaryd",
+      role: "admin",
+    };
+  }
+
+  const { data: user } = await supabase
+    .from("User")
+    .select("id, email, name, role")
+    .eq("id", payload.userId)
+    .single();
 
   return user;
 }

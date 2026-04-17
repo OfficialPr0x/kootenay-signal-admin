@@ -1,26 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
   const search = searchParams.get("search");
 
-  const where: Record<string, unknown> = {};
-  if (status && status !== "all") where.status = status;
+  let query = supabase.from("Client").select("*, Invoice(*)").order("createdAt", { ascending: false });
+
+  if (status && status !== "all") query = query.eq("status", status);
   if (search) {
-    where.OR = [
-      { name: { contains: search } },
-      { email: { contains: search } },
-      { business: { contains: search } },
-    ];
+    query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,business.ilike.%${search}%`);
   }
 
-  const clients = await prisma.client.findMany({
-    where,
-    include: { invoices: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const { data: clients, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json(clients);
 }
@@ -33,9 +27,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Name, email, and business are required" }, { status: 400 });
   }
 
-  const client = await prisma.client.create({
-    data: { name, email, phone, business, website, plan, monthlyRate: monthlyRate || 0, notes },
-  });
+  const { data: client, error } = await supabase
+    .from("Client")
+    .insert({ name, email, phone, business, website, plan, monthlyRate: monthlyRate || 0, notes })
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json(client, { status: 201 });
 }

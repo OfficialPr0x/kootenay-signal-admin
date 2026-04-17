@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { supabase } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 
 // Public webhook for the main Kootenay Signal site to submit leads
@@ -13,8 +13,9 @@ export async function POST(request: NextRequest) {
   }
 
   // Create lead
-  const lead = await prisma.lead.create({
-    data: {
+  const { data: lead, error } = await supabase
+    .from("Lead")
+    .insert({
       name,
       email,
       phone: phone || null,
@@ -22,8 +23,10 @@ export async function POST(request: NextRequest) {
       message: message || null,
       source: "website",
       status: "new",
-    },
-  });
+    })
+    .select()
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Send notification email to admin
   const adminNotificationHtml = `

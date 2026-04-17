@@ -3,9 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
+
+// ── Core Business Models ──
 
 model User {
   id        String   @id @default(cuid())
@@ -38,7 +41,7 @@ model Client {
   phone       String?
   business    String
   website     String?
-  plan        String    @default("SignalCore") // SignalCore, SearchVault, SmartNav, SearchSync
+  plan        String    @default("SignalCore")
   status      String    @default("active") // active, paused, churned
   monthlyRate Float     @default(0)
   startDate   DateTime  @default(now())
@@ -60,21 +63,511 @@ model Invoice {
   updatedAt DateTime @updatedAt
 }
 
-model EmailLog {
-  id          String   @id @default(cuid())
-  to          String
-  subject     String
-  body        String
-  status      String   @default("sent") // sent, failed, bounced
-  resendId    String?
-  createdAt   DateTime @default(now())
-}
-
 model Service {
   id          String  @id @default(cuid())
   name        String  @unique
   description String
   price       Float
-  features    String  // JSON string of features array
+  features    String  // JSON string
   isActive    Boolean @default(true)
+}
+
+model EmailLog {
+  id        String   @id @default(cuid())
+  to        String
+  subject   String
+  body      String
+  status    String   @default("sent")
+  resendId  String?
+  createdAt DateTime @default(now())
+}
+
+// ── Mailbox & Domain Models ──
+
+model EmailAccount {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String
+  isDefault       Boolean  @default(false)
+  domainId        String?
+  warmupProfileId String?
+  warmupStatus    String   @default("none") // none, warming, stable, at_risk, paused
+  dailySendLimit  Int      @default(50)
+  currentVolume   Int      @default(0)
+  trustScore      Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  warmupJobs      WarmupJob[]
+  warmupMessages  WarmupMessage[]
+  healthSnapshots MailboxHealthSnapshot[]
+  campaignAssignments CampaignMailboxAssignment[]
+}
+
+// ── Email Message Models ──
+
+model EmailMessage {
+  id              String   @id @default(cuid())
+  resendId        String?  @unique
+  direction       String   // inbound, outbound
+  fromEmail       String
+  fromName        String?
+  toEmail         String
+  toName          String?
+  cc              String?
+  bcc             String?
+  subject         String
+  bodyHtml        String?
+  bodyText        String?
+  status          String   @default("sent") // sent, delivered, opened, clicked, bounced, failed, received
+  isRead          Boolean  @default(false)
+  isArchived      Boolean  @default(false)
+  isStarred       Boolean  @default(false)
+  threadId        String?
+  inReplyTo       String?
+  tags            String?
+  campaignId      String?
+  campaign        EmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  events          EmailEvent[]
+  classifications AiClassification[]
+  aiDrafts        AiDraft[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model EmailEvent {
+  id        String       @id @default(cuid())
+  messageId String
+  message   EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  type      String       // sent, delivered, opened, clicked, bounced, complained
+  metadata  String?      // JSON
+  createdAt DateTime     @default(now())
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  subject   String
+  bodyHtml  String
+  category  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ── Campaign Models ──
+
+model EmailCampaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   @default("draft") // draft, active, paused, completed
+  subject     String?
+  bodyHtml    String?
+  tags        String?
+  sendWindow  String?  // JSON: { startHour, endHour, timezone, days[] }
+  throttle    Int?     // max sends per hour
+  stopOnReply Boolean  @default(true)
+  stopOnBounce Boolean @default(true)
+  messages    EmailMessage[]
+  steps       EmailCampaignStep[]
+  contacts    CampaignContact[]
+  runs        CampaignRun[]
+  mailboxAssignments CampaignMailboxAssignment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model EmailCampaignStep {
+  id            String        @id @default(cuid())
+  campaignId    String
+  campaign      EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  stepOrder     Int
+  subject       String
+  bodyHtml      String
+  delayDays     Int           @default(0)
+  sendCondition String?       // JSON: { type: "opened"|"clicked"|"no_reply", stepRef }
+  aiPersonalize Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model CampaignContact {
+  id         String        @id @default(cuid())
+  campaignId String
+  campaign   EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId  String
+  contact    EmailContact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status     String        @default("active") // active, replied, bounced, unsubscribed, completed
+  currentStep Int          @default(0)
+  lastSentAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+}
+
+model CampaignRun {
+  id         String        @id @default(cuid())
+  campaignId String
+  campaign   EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  stepOrder  Int
+  contactId  String
+  status     String        @default("pending") // pending, sent, failed, skipped
+  sentAt     DateTime?
+  metadata   String?       // JSON
+  createdAt  DateTime      @default(now())
+}
+
+model CampaignMailboxAssignment {
+  id         String        @id @default(cuid())
+  campaignId String
+  campaign   EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  mailboxId  String
+  mailbox    EmailAccount  @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  weight     Int           @default(1) // rotation weight
+  createdAt  DateTime      @default(now())
+}
+
+// ── Contact / CRM Models ──
+
+model EmailContact {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  phone         String?
+  company       String?
+  companyId     String?
+  tags          String?
+  status        String   @default("subscribed") // subscribed, unsubscribed, bounced
+  source        String?  // website, import, manual, inbound, campaign
+  pipelineStage String   @default("new") // new, contacted, replied, qualified, meeting_booked, proposal, won, lost
+  leadScore     Int      @default(0)
+  lastTouchAt   DateTime?
+  nextActionAt  DateTime?
+  nextAction    String?
+  owner         String?
+  notes         String?
+  campaignContacts CampaignContact[]
+  activities    ContactActivity[]
+  scores        LeadScoreLog[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  domain    String?  @unique
+  industry  String?
+  size      String?
+  website   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ContactActivity {
+  id        String       @id @default(cuid())
+  contactId String
+  contact   EmailContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  type      String       // email_sent, email_received, email_opened, email_clicked, reply, stage_change, note, task
+  title     String
+  metadata  String?      // JSON
+  createdAt DateTime     @default(now())
+}
+
+model LeadScoreLog {
+  id        String       @id @default(cuid())
+  contactId String
+  contact   EmailContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  score     Int
+  reason    String       // e.g. "replied to campaign", "opened 3 emails"
+  createdAt DateTime     @default(now())
+}
+
+model Pipeline {
+  id        String          @id @default(cuid())
+  name      String
+  isDefault Boolean         @default(false)
+  stages    PipelineStage[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model PipelineStage {
+  id         String   @id @default(cuid())
+  pipelineId String
+  pipeline   Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name       String
+  order      Int
+  color      String   @default("#3b82f6")
+  createdAt  DateTime @default(now())
+}
+
+// ── AI Inbox Models ──
+
+model AiClassification {
+  id         String       @id @default(cuid())
+  messageId  String
+  message    EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  intent     String       // lead, existing_client, follow_up, spam, partnership, support, quote_request, not_interested
+  sentiment  String?      // positive, neutral, negative
+  urgency    String       @default("normal") // low, normal, high, urgent
+  confidence Float        @default(0)
+  summary    String?
+  entities   String?      // JSON: extracted contact/company/service/location
+  suggestedAction String? // reply, schedule_followup, add_to_campaign, create_contact, ignore
+  label      String?
+  createdAt  DateTime     @default(now())
+}
+
+model AiDraft {
+  id        String       @id @default(cuid())
+  messageId String
+  message   EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  subject   String?
+  bodyHtml  String
+  bodyText  String?
+  mode      String       @default("manual") // manual, approval_required, autonomous
+  status    String       @default("draft") // draft, approved, sent, rejected
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model ReplyRule {
+  id          String   @id @default(cuid())
+  name        String
+  condition   String   // JSON: { field, operator, value }
+  action      String   // auto_reply, draft, classify, tag, assign
+  template    String?  // template content or ID
+  isActive    Boolean  @default(true)
+  priority    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ApprovalQueue {
+  id         String   @id @default(cuid())
+  type       String   // ai_reply, campaign_send, automation_action
+  referenceId String  // ID of the draft/action
+  status     String   @default("pending") // pending, approved, rejected
+  payload    String   // JSON: full action details
+  reviewedBy String?
+  reviewedAt DateTime?
+  createdAt  DateTime @default(now())
+}
+
+// ── Warmup Models ──
+
+model WarmupProfile {
+  id              String   @id @default(cuid())
+  name            String
+  startVolume     Int      @default(2)
+  maxVolume       Int      @default(40)
+  rampIncrement   Int      @default(2) // increase per day
+  rampCondition   String?  // JSON: { maxBounceRate, minReplyRate, maxComplaintRate }
+  contentVariants String?  // JSON: array of subject/body pairs
+  seedAddresses   String?  // comma-separated seed emails
+  isActive        Boolean  @default(true)
+  jobs            WarmupJob[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model WarmupJob {
+  id           String       @id @default(cuid())
+  mailboxId    String
+  mailbox      EmailAccount @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  profileId    String
+  profile      WarmupProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  status       String       @default("active") // active, paused, completed, failed
+  currentVolume Int         @default(0)
+  totalSent    Int          @default(0)
+  totalReplies Int          @default(0)
+  totalBounces Int          @default(0)
+  lastRunAt    DateTime?
+  messages     WarmupMessage[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model WarmupMessage {
+  id         String       @id @default(cuid())
+  jobId      String
+  job        WarmupJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  mailboxId  String
+  mailbox    EmailAccount @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  toEmail    String
+  subject    String
+  status     String       @default("sent") // sent, delivered, opened, replied, bounced
+  resendId   String?
+  sentAt     DateTime     @default(now())
+  createdAt  DateTime     @default(now())
+}
+
+model MailboxHealthSnapshot {
+  id            String       @id @default(cuid())
+  mailboxId     String
+  mailbox       EmailAccount @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  trustScore    Float        @default(0)
+  bounceRate    Float        @default(0)
+  replyRate     Float        @default(0)
+  openRate      Float        @default(0)
+  complaintRate Float        @default(0)
+  spamRiskScore Float        @default(0)
+  dailyVolume   Int          @default(0)
+  dnsHealthy    Boolean      @default(true)
+  spfStatus     String       @default("unknown") // pass, fail, unknown
+  dkimStatus    String       @default("unknown")
+  dmarcStatus   String       @default("unknown")
+  metadata      String?      // JSON: blacklist checks, etc.
+  createdAt     DateTime     @default(now())
+}
+
+// ── Automation / Workflow Models ──
+
+model Workflow {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   @default("draft") // draft, active, paused
+  trigger     String   // JSON: { type, conditions }
+  isActive    Boolean  @default(false)
+  nodes       WorkflowNode[]
+  edges       WorkflowEdge[]
+  runs        WorkflowRun[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkflowNode {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  type       String    // trigger, action, condition, delay, ai
+  label      String
+  config     String    // JSON: node-specific config
+  posX       Float     @default(0)
+  posY       Float     @default(0)
+  createdAt  DateTime  @default(now())
+}
+
+model WorkflowEdge {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  sourceId   String   // WorkflowNode id
+  targetId   String   // WorkflowNode id
+  condition  String?  // JSON: edge condition
+  createdAt  DateTime @default(now())
+}
+
+model WorkflowRun {
+  id         String          @id @default(cuid())
+  workflowId String
+  workflow   Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  status     String          @default("running") // running, completed, failed, cancelled
+  triggeredBy String?        // what triggered this run
+  startedAt  DateTime        @default(now())
+  completedAt DateTime?
+  logs       WorkflowRunLog[]
+  createdAt  DateTime        @default(now())
+}
+
+model WorkflowRunLog {
+  id        String      @id @default(cuid())
+  runId     String
+  run       WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  nodeId    String?
+  action    String
+  status    String      @default("success") // success, failed, skipped
+  message   String?
+  metadata  String?     // JSON
+  createdAt DateTime    @default(now())
+}
+
+// ── Deliverability Models ──
+
+model DeliverabilitySnapshot {
+  id              String   @id @default(cuid())
+  domain          String
+  overallScore    Float    @default(0)
+  spfStatus       String   @default("unknown")
+  dkimStatus      String   @default("unknown")
+  dmarcStatus     String   @default("unknown")
+  bounceRate      Float    @default(0)
+  complaintRate   Float    @default(0)
+  unsubscribeRate Float    @default(0)
+  replyRate       Float    @default(0)
+  sendingVolume   Int      @default(0)
+  blacklistStatus String?  // JSON: list of blacklist check results
+  riskAlerts      String?  // JSON: array of alert objects
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+}
+
+// ── AI Action Log ──
+
+model AiAction {
+  id          String   @id @default(cuid())
+  type        String   // classify, draft_reply, score_lead, summarize, personalize
+  referenceId String?  // ID of related entity
+  input       String?  // JSON: input data
+  output      String?  // JSON: result
+  confidence  Float?
+  status      String   @default("completed") // completed, failed, pending
+  createdAt   DateTime @default(now())
+}
+
+// ── Agent Command Center Models ──
+
+model AgentSession {
+  id           String     @id @default(cuid())
+  userId       String
+  status       String     @default("active") // active, closed
+  lastActiveAt DateTime   @default(now())
+  runs         AgentRun[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model AgentRun {
+  id               String          @id @default(cuid())
+  sessionId        String
+  session          AgentSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  commandText      String
+  intentType       String?         // email_send, inbox_action, campaign_action, contact_search, invoice_action, warmup_action, report_action, admin_action
+  planJson         String?         // JSON: step plan
+  status           String          @default("planning") // planning, needs_approval, running, completed, failed, cancelled
+  requiresApproval Boolean         @default(false)
+  resultSummary    String?
+  errorJson        String?
+  toolCalls        AgentToolCall[]
+  approvals        AgentApproval[]
+  completedAt      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+model AgentToolCall {
+  id             String   @id @default(cuid())
+  runId          String
+  run            AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  toolName       String
+  toolInputJson  String?  // JSON
+  toolOutputJson String?  // JSON
+  status         String   @default("pending") // pending, running, completed, failed
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime @default(now())
+}
+
+model AgentApproval {
+  id                  String   @id @default(cuid())
+  runId               String
+  run                 AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  actionType          String
+  summary             String
+  approvalPayloadJson String   // JSON: targets, counts, mailbox, timing etc.
+  status              String   @default("pending") // pending, approved, rejected
+  approvedBy          String?
+  approvedAt          DateTime?
+  createdAt           DateTime @default(now())
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function PATCH(
   request: NextRequest,
@@ -12,11 +12,8 @@ export async function PATCH(
     body.features = JSON.stringify(body.features);
   }
 
-  const service = await prisma.service.update({
-    where: { id },
-    data: body,
-  });
-
+  const { data: service, error } = await supabase.from("Service").update(body).eq("id", id).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(service);
 }
 
@@ -25,6 +22,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  await prisma.service.delete({ where: { id } });
+  await supabase.from("Service").delete().eq("id", id);
   return NextResponse.json({ success: true });
 }
