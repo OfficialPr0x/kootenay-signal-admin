@@ -40,7 +40,7 @@ export default function LeadsPage() {
 
     const res = await fetch(`/api/leads?${params}`);
     const data = await res.json();
-    setLeads(data);
+    setLeads(Array.isArray(data) ? data : []);
     setLoading(false);
   }, [filter, search]);
 

@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS "Client" (
 CREATE TABLE IF NOT EXISTS "Invoice" (
     "id" TEXT NOT NULL DEFAULT gen_random_uuid()::text,
     "clientId" TEXT NOT NULL,
+    "description" TEXT,
     "amount" DOUBLE PRECISION NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'pending',
     "dueDate" TIMESTAMP(3) NOT NULL,

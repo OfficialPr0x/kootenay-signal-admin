@@ -73,12 +73,15 @@ CREATE TABLE "Invoice" (
 CREATE INDEX "idx_invoice_clientId" ON "Invoice"("clientId");
 
 CREATE TABLE "Service" (
-  "id"          TEXT PRIMARY KEY DEFAULT replace(uuid_generate_v4()::text, '-', ''),
-  "name"        TEXT NOT NULL UNIQUE,
-  "description" TEXT NOT NULL,
-  "price"       DOUBLE PRECISION NOT NULL,
-  "features"    TEXT NOT NULL,
-  "isActive"    BOOLEAN NOT NULL DEFAULT true
+  "id"               TEXT PRIMARY KEY DEFAULT replace(uuid_generate_v4()::text, '-', ''),
+  "name"             TEXT NOT NULL UNIQUE,
+  "description"      TEXT NOT NULL,
+  "price"            DOUBLE PRECISION NOT NULL,
+  "features"         TEXT NOT NULL,
+  "isActive"         BOOLEAN NOT NULL DEFAULT true,
+  "isOneOff"         BOOLEAN NOT NULL DEFAULT false,
+  "stripeProductId"  TEXT,
+  "stripePriceId"    TEXT
 );
 
 CREATE TABLE "EmailLog" (

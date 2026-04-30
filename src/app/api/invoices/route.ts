@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { clientId, amount, dueDate } = body;
+  const { clientId, amount, dueDate, description } = body;
 
   if (!clientId || !amount || !dueDate) {
     return NextResponse.json({ error: "Client, amount, and due date are required" }, { status: 400 });
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   const { data: invoice, error } = await supabase
     .from("Invoice")
-    .insert({ clientId, amount, dueDate: new Date(dueDate).toISOString() })
+    .insert({ clientId, amount, dueDate: new Date(dueDate).toISOString(), description: description || null })
     .select()
     .single();
 

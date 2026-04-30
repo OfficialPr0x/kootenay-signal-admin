@@ -46,7 +46,7 @@ export default function ClientsPage() {
 
     const res = await fetch(`/api/clients?${params}`);
     const data = await res.json();
-    setClients(data);
+    setClients(Array.isArray(data) ? data : []);
     setLoading(false);
   }, [filter, search]);
 
@@ -206,9 +206,9 @@ export default function ClientsPage() {
       )}
 
       {loading ? (
-        <p className="text-center text-muted text-[13px] py-12">Loading...</p>
+        <div className="panel"><p className="px-5 py-12 text-center text-muted text-[13px]">Loading...</p></div>
       ) : clients.length === 0 ? (
-        <p className="text-center text-muted text-[13px] py-12">No clients found</p>
+        <div className="panel"><p className="px-5 py-12 text-center text-muted text-[13px]">No clients found</p></div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {clients.map((client) => (

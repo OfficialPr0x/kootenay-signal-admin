@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/db";
+import { stripe, stripeConfigured } from "@/lib/stripe";
 import Link from "next/link";
 
 async function getStats() {
@@ -12,14 +13,33 @@ async function getStats() {
       supabase.from("EmailLog").select("*", { count: "exact", head: true }),
     ]);
 
-  const revenue = (invoicesRes.data || []).reduce((sum: number, i: Record<string, number>) => sum + (i.amount || 0), 0);
+  const invoiceRevenue = (invoicesRes.data || []).reduce((sum: number, i: Record<string, number>) => sum + (i.amount || 0), 0);
+
+  // Pull MRR from Stripe if configured
+  let stripeMrr: number | null = null;
+  if (stripeConfigured()) {
+    try {
+      const subs = await stripe.subscriptions.list({ status: "active", limit: 100 });
+      stripeMrr = subs.data.reduce((s, sub) => {
+        const item = sub.items.data[0];
+        if (!item?.price) return s;
+        const amount = item.price.unit_amount || 0;
+        const interval = item.price.recurring?.interval;
+        const monthly = interval === "year" ? amount / 12 : amount;
+        return s + monthly;
+      }, 0) / 100;
+    } catch {
+      stripeMrr = null;
+    }
+  }
 
   return {
     leadCount: leadsRes.count || 0,
     clientCount: clientsRes.count || 0,
     activeClients: activeClientsRes.count || 0,
     recentLeads: recentLeadsRes.data || [],
-    revenue,
+    revenue: invoiceRevenue,
+    stripeMrr,
     emailsSent: emailsSentRes.count || 0,
   };
 }
@@ -45,11 +65,13 @@ export default async function DashboardPage() {
       indicator: "border-l-success",
     },
     {
-      label: "Total Revenue",
-      value: `$${stats.revenue.toLocaleString()}`,
+      label: stats.stripeMrr !== null ? "Stripe MRR" : "Total Revenue",
+      value: stats.stripeMrr !== null
+        ? `$${stats.stripeMrr.toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/mo`
+        : `$${stats.revenue.toLocaleString()}`,
       accent: "text-warning",
       bg: "bg-warning/8",
-      href: "/dashboard/invoices",
+      href: "/dashboard/billing",
       indicator: "border-l-warning",
     },
     {

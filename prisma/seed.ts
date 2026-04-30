@@ -20,24 +20,141 @@ async function main() {
   });
   console.log(`✅ Admin user: ${admin.email}`);
 
-  // Create services matching the site
+  // ── Full service catalog ──
   const services = [
+    // ── One-time setup (isOneOff: true) ──
+    {
+      name: "Website Build",
+      description: "Professional website built and handed off. One-time setup — no ongoing management included.",
+      price: 150,
+      isOneOff: true,
+      features: JSON.stringify([
+        "Mobile-responsive design",
+        "Up to 5 pages",
+        "Contact form",
+        "Google Analytics setup",
+        "Handed off to client",
+        "One-time setup · No ongoing management",
+      ]),
+    },
+    {
+      name: "Google Ranking Boost",
+      description: "One-time SEO foundation setup. Keywords, meta titles & descriptions, H1/H2 structure, schema, image alt tags, internal linking.",
+      price: 97,
+      isOneOff: true,
+      features: JSON.stringify([
+        "Keyword insertion (service + city)",
+        "Meta titles & descriptions",
+        "H1/H2 structure optimization",
+        "Local business schema markup",
+        "Image alt tag optimization",
+        "Internal linking setup",
+        "One-time setup · No ongoing management",
+      ]),
+    },
+    {
+      name: "Missed Call Text Back",
+      description: "Auto-SMS reply when a call is missed. Twilio/Zapier integration, missed call trigger, custom message template.",
+      price: 147,
+      isOneOff: true,
+      features: JSON.stringify([
+        "Twilio or similar setup",
+        "Missed call trigger automation",
+        "Custom SMS message template",
+        "Zapier / webhook integration",
+        "Testing & go-live",
+        "One-time setup · No ongoing management",
+      ]),
+    },
+    {
+      name: "AI Quote Assistant",
+      description: "Structured prompt system or mini tool for generating quotes and proposals. Inputs → outputs. One-time build.",
+      price: 97,
+      isOneOff: true,
+      features: JSON.stringify([
+        "Custom prompt engineering",
+        "Quote/inquiry workflow",
+        "Website embed or shareable link",
+        "Testing & refinement",
+        "Handoff documentation",
+        "One-time setup · No ongoing management",
+      ]),
+    },
+    {
+      name: "Google Business Optimization",
+      description: "Full GBP audit and optimization. Categories, description, service areas, keyword injection, posting template, review strategy.",
+      price: 97,
+      isOneOff: true,
+      features: JSON.stringify([
+        "Category optimization",
+        "Business description rewrite",
+        "Service area configuration",
+        "Keyword injection",
+        "Posting template",
+        "Review strategy guide",
+        "One-time setup · No ongoing management",
+      ]),
+    },
+    // ── Monthly retainers (isOneOff: false) ──
+    {
+      name: "SEO Retainer",
+      description: "Ongoing search visibility management. Backlinking, content strategy, ranking monitoring, technical SEO — fully managed monthly.",
+      price: 997,
+      isOneOff: false,
+      features: JSON.stringify([
+        "Ongoing backlink acquisition",
+        "Monthly content strategy",
+        "Keyword rank tracking",
+        "Technical SEO audits",
+        "Google Search Console monitoring",
+        "Monthly reporting",
+      ]),
+    },
+    {
+      name: "Automation Management",
+      description: "Ongoing automation and workflow management. New automations, monitoring, optimization — your systems always running.",
+      price: 497,
+      isOneOff: false,
+      features: JSON.stringify([
+        "Workflow monitoring & optimization",
+        "New automation builds",
+        "Missed call / lead response systems",
+        "CRM integration maintenance",
+        "Monthly review call",
+      ]),
+    },
+    {
+      name: "Ads Management",
+      description: "Fully managed Google and Meta advertising. Campaign build, optimization, reporting, and scaling — all done for you.",
+      price: 1000,
+      isOneOff: false,
+      features: JSON.stringify([
+        "Google Ads campaign management",
+        "Meta (Facebook/Instagram) ads",
+        "Ad copy & creative direction",
+        "Audience targeting & optimization",
+        "Weekly performance reporting",
+        "Monthly strategy review",
+      ]),
+    },
     {
       name: "SignalCore™",
-      description: "Foundation package for regional search dominance. Includes Google Business optimization, local citations, and core SEO setup.",
+      description: "Foundation retainer for regional search dominance. Google Business management, local citations, core SEO — all handled monthly.",
       price: 1500,
+      isOneOff: false,
       features: JSON.stringify([
-        "Google Business Profile optimization",
+        "Google Business Profile management",
         "Local citation building",
-        "Core SEO foundation",
+        "Core SEO maintenance",
         "Monthly reporting",
         "Keyword tracking",
       ]),
     },
     {
       name: "SearchVault™",
-      description: "Advanced search visibility package. Builds on SignalCore with content strategy, backlink campaigns, and competitive analysis.",
+      description: "Advanced search visibility retainer. Everything in SignalCore plus content strategy, backlink campaigns, and competitive analysis.",
       price: 2500,
+      isOneOff: false,
       features: JSON.stringify([
         "Everything in SignalCore",
         "Content strategy & creation",
@@ -48,21 +165,10 @@ async function main() {
       ]),
     },
     {
-      name: "SmartNav™",
-      description: "Intelligent navigation and UX optimization. Conversion-focused website improvements with A/B testing.",
-      price: 2000,
-      features: JSON.stringify([
-        "UX audit & recommendations",
-        "Conversion rate optimization",
-        "A/B testing",
-        "Navigation restructuring",
-        "Mobile optimization",
-      ]),
-    },
-    {
       name: "SearchSync™",
-      description: "Full multi-platform synchronization. Ensures consistent presence across all search platforms and directories.",
+      description: "Full multi-platform sync retainer. Consistent presence across all search platforms, directories, review sites, and social.",
       price: 3000,
+      isOneOff: false,
       features: JSON.stringify([
         "Everything in SearchVault",
         "Multi-platform sync",
