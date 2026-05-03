@@ -8,10 +8,8 @@ const openai = new OpenAI({
 
 const VALID_SIZES = [
   "1024x1024",
-  "768x1024",
-  "1152x2048",
-  "1024x768",
-  "2048x1152",
+  "1024x1536",
+  "1536x1024",
   "auto",
 ] as const;
 
@@ -108,9 +106,9 @@ export async function POST(request: NextRequest) {
     const finalPrompt = brandedPrompt.length > 4000 ? userPrompt : brandedPrompt;
 
     const result = await openai.images.generate({
-      model: "gpt-image-2-2026-04-21",
+      model: "gpt-image-1",
       prompt: finalPrompt,
-      size: size === "auto" ? undefined : (size as "1024x1024"),
+      size: size === "auto" ? undefined : (size as "1024x1024" | "1024x1536" | "1536x1024"),
       quality: quality === "auto" ? undefined : (quality as "low" | "medium" | "high"),
       n: count,
       response_format: "b64_json",

@@ -82,10 +82,10 @@ const ASPECT_OPTIONS: AspectOption[] = [
   {
     id: "portrait",
     label: "Portrait",
-    sublabel: "3:4 · 768×1024",
-    size: "768x1024",
-    w: 3,
-    h: 4,
+    sublabel: "2:3 · 1024×1536",
+    size: "1024x1536",
+    w: 2,
+    h: 3,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
         <rect x="5" y="2" width="14" height="20" rx="2" />
@@ -95,10 +95,10 @@ const ASPECT_OPTIONS: AspectOption[] = [
   {
     id: "story",
     label: "Story",
-    sublabel: "9:16 · 1152×2048",
-    size: "1152x2048",
-    w: 9,
-    h: 16,
+    sublabel: "Story · 1024×1536",
+    size: "1024x1536",
+    w: 2,
+    h: 3,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
         <rect x="7" y="1" width="10" height="22" rx="2" />
@@ -108,10 +108,10 @@ const ASPECT_OPTIONS: AspectOption[] = [
   {
     id: "landscape",
     label: "Landscape",
-    sublabel: "4:3 · 1024×768",
-    size: "1024x768",
-    w: 4,
-    h: 3,
+    sublabel: "3:2 · 1536×1024",
+    size: "1536x1024",
+    w: 3,
+    h: 2,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
         <rect x="2" y="5" width="20" height="14" rx="2" />
@@ -121,10 +121,10 @@ const ASPECT_OPTIONS: AspectOption[] = [
   {
     id: "widescreen",
     label: "Widescreen",
-    sublabel: "16:9 · 2048×1152",
-    size: "2048x1152",
-    w: 16,
-    h: 9,
+    sublabel: "Wide · 1536×1024",
+    size: "1536x1024",
+    w: 3,
+    h: 2,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
         <rect x="1" y="6" width="22" height="12" rx="2" />
