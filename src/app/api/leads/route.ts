@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       .filter((l) => l.name || l.business)
       .map((l) => ({
         name: l.name || l.business,
-        email: l.email || null,
+        email: l.email || "",
         phone: l.phone || null,
         business: l.business || null,
         message: l.message || l.notes || null,
@@ -43,23 +43,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No valid leads in array" }, { status: 400 });
     }
 
-    const withEmail = inserts.filter((l) => l.email);
-    const withoutEmail = inserts.filter((l) => !l.email);
+    const { data: saved, error: insertErr } = await supabase
+      .from("Lead")
+      .insert(inserts)
+      .select();
 
-    const results = await Promise.all([
-      withEmail.length > 0
-        ? supabase.from("Lead").upsert(withEmail, { onConflict: "email", ignoreDuplicates: false }).select()
-        : Promise.resolve({ data: [], error: null }),
-      withoutEmail.length > 0
-        ? supabase.from("Lead").insert(withoutEmail).select()
-        : Promise.resolve({ data: [], error: null }),
-    ]);
+    if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
 
-    const err = results.find((r) => r.error)?.error;
-    if (err) return NextResponse.json({ error: err.message }, { status: 500 });
-
-    const saved = (results[0].data?.length ?? 0) + (results[1].data?.length ?? 0);
-    return NextResponse.json({ imported: saved, total: inserts.length }, { status: 201 });
+    return NextResponse.json({ imported: saved?.length ?? 0, total: inserts.length }, { status: 201 });
   }
 
   // Single insert
