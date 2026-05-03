@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
-import { renderToBuffer } from "@react-pdf/renderer";
+import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { InvoicePDF } from "@/lib/invoice-pdf";
 import { Resend } from "resend";
 import React from "react";
@@ -35,7 +35,7 @@ export async function POST(
   // Generate PDF
   let pdfBuffer: Buffer;
   try {
-    pdfBuffer = await renderToBuffer(React.createElement(InvoicePDF, { invoice }));
+    pdfBuffer = await renderToBuffer(React.createElement(InvoicePDF, { invoice }) as React.ReactElement<DocumentProps>);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "PDF generation failed";
     return NextResponse.json({ error: msg }, { status: 500 });

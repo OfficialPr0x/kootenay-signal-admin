@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
-import { renderToBuffer } from "@react-pdf/renderer";
+import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { InvoicePDF } from "@/lib/invoice-pdf";
 import React from "react";
 
@@ -26,12 +26,12 @@ export async function GET(
   };
 
   const buffer = await renderToBuffer(
-    React.createElement(InvoicePDF, { invoice })
+    React.createElement(InvoicePDF, { invoice }) as React.ReactElement<DocumentProps>
   );
 
   const shortId = id.slice(-8).toUpperCase();
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",

@@ -179,7 +179,7 @@ function applyMapping(rows: Record<string, string>[], mapping: Record<string, st
           lead[field] = lead[field] ? `${lead[field]}, ${val}` : val;
         }
       }
-      return lead as MappedLead;
+      return lead as unknown as MappedLead;
     })
     .filter((l) => l.name || l.business || l.email); // keep rows with at least something useful
 }
@@ -233,77 +233,4 @@ export async function POST(request: NextRequest) {
 }
 
 
-/** Simple CSV parser — handles quoted fields with commas inside */
-function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  if (lines.length < 2) return [];
 
-  const headers = parseCSVLine(lines[0]).map((h) =>
-    h.trim().toLowerCase().replace(/\s+/g, "_")
-  );
-
-  const rows: Record<string, string>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const values = parseCSVLine(line);
-    const row: Record<string, string> = {};
-    headers.forEach((h, idx) => {
-      row[h] = values[idx]?.trim() ?? "";
-    });
-    rows.push(row);
-  }
-  return rows;
-}
-
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === "," && !inQuotes) {
-      fields.push(current);
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  fields.push(current);
-  return fields;
-}
-
-/** Map CSV column aliases to our canonical field names */
-const FIELD_MAP: Record<string, string> = {
-  name: "name",
-  full_name: "name",
-  contact_name: "name",
-  email: "email",
-  email_address: "email",
-  phone: "phone",
-  phone_number: "phone",
-  mobile: "phone",
-  business: "business",
-  company: "business",
-  company_name: "business",
-  organisation: "business",
-  organization: "business",
-  website: "websiteUrl",
-  website_url: "websiteUrl",
-  url: "websiteUrl",
-  industry: "industry",
-  sector: "industry",
-  linkedin: "linkedinUrl",
-  linkedin_url: "linkedinUrl",
-  notes: "notes",
-  message: "message",
-  source: "source",
-};
