@@ -13,6 +13,7 @@ import {
   IconLogout,
   IconBilling,
   IconPipeline,
+  IconAds,
 } from "@/components/icons";
 
 const navItems = [
@@ -23,8 +24,9 @@ const navItems = [
   { href: "/dashboard/invoices", label: "Invoices",  icon: IconInvoices },
   { href: "/dashboard/billing",  label: "Billing",   icon: IconBilling },
   { href: "/dashboard/email",    label: "Email",     icon: IconEmail },
-  { href: "/dashboard/services", label: "Services",  icon: IconServices },
-  { href: "/dashboard/settings", label: "Settings",  icon: IconSettings },
+  { href: "/dashboard/ads",      label: "Ad Creatives", icon: IconAds },
+  { href: "/dashboard/services", label: "Services",     icon: IconServices },
+  { href: "/dashboard/settings", label: "Settings",     icon: IconSettings },
 ];
 
 interface SidebarProps {
