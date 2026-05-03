@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       response_format: "b64_json",
     });
 
-    const images = result.data.map((item) => ({
+    const images = (result.data ?? []).map((item) => ({
       b64_json: item.b64_json,
       revised_prompt: (item as { revised_prompt?: string }).revised_prompt ?? null,
     }));
