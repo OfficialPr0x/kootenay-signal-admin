@@ -2,6 +2,26 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
+// ── Web Speech API types (not yet in TypeScript's DOM lib) ──
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionInstance {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: Event) => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
+
 // ── Types ──
 
 type ToolCall = {
@@ -65,7 +85,7 @@ export function CommandPalette() {
   const [history, setHistory] = useState<AgentRun[]>([]);
   const [voiceState, setVoiceState] = useState<VoiceState>("off");
   const inputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   // ── Keyboard shortcut ──
   useEffect(() => {
@@ -181,7 +201,7 @@ export function CommandPalette() {
   const toggleVoice = useCallback(() => {
     const SpeechRecognitionAPI =
       typeof window !== "undefined"
-        ? (window.SpeechRecognition ?? (window as unknown as Record<string, unknown>).webkitSpeechRecognition as typeof SpeechRecognition | undefined)
+        ? ((window as unknown as Record<string, SpeechRecognitionConstructor | undefined>).SpeechRecognition ?? (window as unknown as Record<string, SpeechRecognitionConstructor | undefined>).webkitSpeechRecognition)
         : undefined;
 
     if (!SpeechRecognitionAPI) {

@@ -193,7 +193,7 @@ async function getStats() {
     stripeSubscriptions,
     stripeReady: stripeConfigured(),
     stripeAllCharges,
-    recentPayments: (recentPaymentsRes.data || []) as {
+    recentPayments: (recentPaymentsRes.data || []) as unknown as {
       id: string;
       amount: number;
       method: string;
@@ -316,7 +316,7 @@ export default async function DashboardPage() {
           ) : (
             <div className="divide-y divide-border">
               {s.pendingInvoices.map((inv) => {
-                const client = inv.Client as { name: string; business: string } | null;
+                const client = inv.Client as unknown as { name: string; business: string } | null;
                 const due = new Date(inv.dueDate);
                 const isOverdue = due < new Date();
                 return (
