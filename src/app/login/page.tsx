@@ -168,28 +168,22 @@ export default function LoginPage() {
         <div className="w-full max-w-[420px] relative z-10">
 
           {/* Logo block */}
-          <div className="flex flex-col items-center mb-10 gap-5">
+          <div className="flex flex-col items-center mb-10">
             <div className="relative">
-              <div className="absolute inset-0 rounded-full bg-[#e87f24]/10 blur-2xl scale-[1.6]" />
+              <div className="absolute inset-0 rounded-full bg-[#e87f24]/12 blur-3xl scale-[2]" />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="https://res.cloudinary.com/doajstql7/image/upload/v1777003162/f3d21215-ada9-4ea3-b86d-510a6885c8f5-removebg-preview_uat1ay.png"
                 alt="Kootenay Signal"
-                width={96}
-                height={96}
-                className="relative w-24 h-24 object-contain ks-logo-glow"
+                width={160}
+                height={160}
+                className="relative w-40 h-40 object-contain ks-logo-glow"
               />
             </div>
-
-            <div className="text-center">
-              <h1 className="text-[22px] font-bold tracking-[0.22em] text-white/90 uppercase">
-                Kootenay&nbsp;<span className="text-[#e87f24]">Signal</span>
-              </h1>
-              <div className="flex items-center justify-center gap-3 mt-2">
-                <div className="h-px w-14 ks-divider" />
-                <p className="font-mono text-[9px] tracking-[0.4em] text-white/30 uppercase">Admin&nbsp;Portal</p>
-                <div className="h-px w-14 ks-divider" />
-              </div>
+            <div className="flex items-center justify-center gap-3 mt-5">
+              <div className="h-px w-16 ks-divider" />
+              <p className="font-mono text-[9px] tracking-[0.4em] text-white/30 uppercase">Admin&nbsp;Portal</p>
+              <div className="h-px w-16 ks-divider" />
             </div>
           </div>
 
