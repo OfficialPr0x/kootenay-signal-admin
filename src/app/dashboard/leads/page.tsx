@@ -5,7 +5,7 @@ import {
   IconPlus, IconSearch, IconEdit, IconTrash, IconX, IconSend,
   IconGlobe, IconSparkles, IconBot, IconUpload,
   IconMapPin, IconBuilding, IconRefresh, IconCheck, IconAlert,
-  IconChevronRight, IconLink, IconFilter,
+  IconChevronRight, IconLink, IconFilter, IconEye, IconZap, IconClock,
 } from "@/components/icons";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -367,6 +367,88 @@ export default function LeadsPage() {
   );
 }
 
+// ─── Pitch Email Status ───────────────────────────────────────────────────────
+
+const PITCH_STATUS_CONFIG: Record<string, { label: string; className: string; border: string }> = {
+  sent:      { label: "Sent",      className: "text-muted",   border: "border-border" },
+  delivered: { label: "Delivered", className: "text-blue-400", border: "border-blue-500/30" },
+  opened:    { label: "Opened",    className: "text-yellow-400", border: "border-yellow-500/30" },
+  clicked:   { label: "Clicked",   className: "text-emerald-400", border: "border-emerald-500/30" },
+  bounced:   { label: "Bounced",   className: "text-red-400", border: "border-red-500/30" },
+  failed:    { label: "Failed",    className: "text-red-400", border: "border-red-500/30" },
+};
+
+interface PitchEvent {
+  id: string;
+  type: string;
+  createdAt: string;
+}
+
+function PitchEmailStatus({ leadId, sentAt }: { leadId: string; sentAt: string }) {
+  const [status, setStatus] = useState<string>("sent");
+  const [events, setEvents] = useState<PitchEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/email?leadId=${leadId}&view=sent&limit=1`);
+      const data = await res.json();
+      const msg = data.messages?.[0];
+      if (msg) {
+        setStatus(msg.status || "sent");
+        setEvents(msg.events || []);
+      }
+    } catch { /* empty */ }
+    setLoading(false);
+  }, [leadId]);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  const sc = PITCH_STATUS_CONFIG[status] || PITCH_STATUS_CONFIG.sent;
+  const fmtEvent = (d: string) =>
+    new Date(d).toLocaleString("en-CA", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+  return (
+    <div className={`rounded-lg border px-3 py-2.5 text-[12px] ${sc.border} bg-surface/50`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <IconCheck size={13} className="text-emerald-400 shrink-0" />
+          <span className="text-muted">Sent {new Date(sentAt).toLocaleDateString()}</span>
+          <span className="text-border">·</span>
+          {(() => {
+            const StatusIcon = status === "opened" ? IconEye
+              : status === "clicked" ? IconZap
+              : status === "bounced" ? IconAlert
+              : status === "delivered" ? IconCheck
+              : IconClock;
+            return (
+              <span className={`flex items-center gap-1 font-medium ${sc.className}`}>
+                <StatusIcon size={11} /> {sc.label}
+              </span>
+            );
+          })()}
+        </div>
+        <button onClick={fetchStatus} disabled={loading} className="text-muted hover:text-foreground transition p-0.5">
+          <IconRefresh size={12} className={loading ? "animate-spin" : ""} />
+        </button>
+      </div>
+      {events.length > 0 && (
+        <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border flex-wrap">
+          {events.slice(-4).map((ev) => {
+            const esc = PITCH_STATUS_CONFIG[ev.type] || { label: ev.type, className: "text-muted", border: "" };
+            return (
+              <span key={ev.id} className={`text-[10px] ${esc.className}`}>
+                {esc.label} · {fmtEvent(ev.createdAt)}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Lead Detail Drawer ───────────────────────────────────────────────────────
 
 function LeadDrawer({
@@ -570,11 +652,7 @@ function LeadDrawer({
               </div>
             ) : (
               <>
-                {lead.pitchSentAt && (
-                  <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2 text-[12px] text-emerald-400">
-                    <IconCheck size={13} /> Sent {new Date(lead.pitchSentAt).toLocaleDateString()}
-                  </div>
-                )}
+                {lead.pitchSentAt && <PitchEmailStatus leadId={lead.id} sentAt={lead.pitchSentAt} />}
 
                 <div>
                   <label className="block text-[11px] text-muted uppercase tracking-wide mb-2">

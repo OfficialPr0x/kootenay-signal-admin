@@ -3,8 +3,18 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   IconSearch, IconStar, IconStarFilled, IconArchive, IconReply,
-  IconBrain, IconCheck, IconX, IconTag, IconRefresh, IconClock,
+  IconBrain, IconCheck, IconX, IconRefresh, IconSend, IconInbox,
+  IconEye, IconClock, IconAlert, IconTag, IconZap,
 } from "@/components/icons";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface EmailEvent {
+  id: string;
+  type: string;
+  metadata: string | null;
+  createdAt: string;
+}
 
 interface AiClassification {
   id: string;
@@ -39,79 +49,118 @@ interface EmailMessage {
   isStarred: boolean;
   threadId: string | null;
   tags: string | null;
+  events: EmailEvent[];
   classifications: AiClassification[];
   aiDrafts: AiDraft[];
   createdAt: string;
 }
 
-type InboxFilter = "all" | "unread" | "important" | "needs_reply" | "ai_handled";
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const INTENT_COLORS: Record<string, string> = {
-  lead: "badge-accent",
-  existing_client: "badge-success",
-  follow_up: "badge-warning",
-  spam: "badge-danger",
-  partnership: "badge-info",
-  support: "badge-info",
-  quote_request: "badge-accent",
-  not_interested: "badge-muted",
+const STATUS_CONFIG: Record<string, { label: string; className: string; icon?: React.ReactNode }> = {
+  sent:      { label: "Sent",      className: "text-muted" },
+  delivered: { label: "Delivered", className: "text-info" },
+  opened:    { label: "Opened",    className: "text-success" },
+  clicked:   { label: "Clicked",   className: "text-accent" },
+  bounced:   { label: "Bounced",   className: "text-danger" },
+  failed:    { label: "Failed",    className: "text-danger" },
+  received:  { label: "Received",  className: "text-muted" },
 };
 
-const URGENCY_DOTS: Record<string, string> = {
-  urgent: "bg-danger",
-  high: "bg-warning",
-  normal: "bg-info",
-  low: "bg-muted",
+const INTENT_BADGE: Record<string, string> = {
+  lead:            "bg-accent/15 text-accent",
+  existing_client: "bg-emerald-500/15 text-emerald-400",
+  follow_up:       "bg-yellow-500/15 text-yellow-400",
+  spam:            "bg-red-500/15 text-red-400",
+  partnership:     "bg-blue-500/15 text-blue-400",
+  support:         "bg-purple-500/15 text-purple-400",
+  quote_request:   "bg-accent/15 text-accent",
+  not_interested:  "bg-surface text-muted",
 };
 
-export default function InboxPage() {
+// Extract human-readable source from tags string
+function getTagSource(tags: string | null): string | null {
+  if (!tags) return null;
+  if (tags.includes("type:lead_pitch")) return "Lead Pitch";
+  if (tags.includes("type:invoice")) return "Invoice";
+  if (tags.includes("mode:cold_outreach")) return "Cold Outreach";
+  if (tags.includes("mode:follow_up")) return "Follow-Up";
+  if (tags.includes("mode:reply")) return "Reply";
+  if (tags.includes("mode:reactivation")) return "Reactivation";
+  if (tags.includes("mode:meeting_request")) return "Meeting Request";
+  return null;
+}
+
+function fmt(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+}
+
+function fmtFull(dateStr: string): string {
+  return new Date(dateStr).toLocaleString("en-CA", {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  });
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+type ViewMode = "inbox" | "sent";
+
+export default function EmailPage() {
+  const [view, setView] = useState<ViewMode>("inbox");
   const [messages, setMessages] = useState<EmailMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<InboxFilter>("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<EmailMessage | null>(null);
-  const [stats, setStats] = useState({ unread: 0, needsReply: 0 });
+  const [unreadCount, setUnreadCount] = useState(0);
   const [replyText, setReplyText] = useState("");
   const [replying, setReplying] = useState(false);
 
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ view: "inbox" });
+      const params = new URLSearchParams({ view });
       if (search) params.set("search", search);
       const res = await fetch(`/api/email?${params}`);
       const data = await res.json();
-      const msgs = data.messages || [];
-      setMessages(msgs);
-      setStats({
-        unread: msgs.filter((m: EmailMessage) => !m.isRead).length,
-        needsReply: msgs.filter((m: EmailMessage) =>
-          m.direction === "inbound" && !m.isRead
-        ).length,
-      });
+      setMessages(data.messages || []);
+      setUnreadCount(data.unreadCount || 0);
     } catch { /* empty */ }
     setLoading(false);
-  }, [search]);
+  }, [view, search]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
-  const filteredMessages = messages.filter((m) => {
-    if (filter === "unread") return !m.isRead;
-    if (filter === "important") return m.isStarred;
-    if (filter === "needs_reply") return m.direction === "inbound" && !m.isRead;
-    if (filter === "ai_handled") return m.aiDrafts?.some(d => d.status === "sent");
-    return true;
-  });
+  // Keep selected message up to date after refetch
+  useEffect(() => {
+    if (selected) {
+      const refreshed = messages.find((m) => m.id === selected.id);
+      if (refreshed) setSelected(refreshed);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
 
-  async function toggleStar(id: string) {
-    const msg = messages.find(m => m.id === id);
+  async function toggleStar(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const msg = messages.find((m) => m.id === id);
     if (!msg) return;
     await fetch(`/api/email/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isStarred: !msg.isStarred }),
     });
-    setMessages(prev => prev.map(m => m.id === id ? { ...m, isStarred: !m.isStarred } : m));
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, isStarred: !m.isStarred } : m))
+    );
   }
 
   async function markRead(id: string) {
@@ -120,24 +169,28 @@ export default function InboxPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isRead: true }),
     });
-    setMessages(prev => prev.map(m => m.id === id ? { ...m, isRead: true } : m));
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, isRead: true } : m))
+    );
+    setUnreadCount((c) => Math.max(0, c - 1));
   }
 
-  async function archiveMessage(id: string) {
+  async function archiveMessage(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
     await fetch(`/api/email/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isArchived: true }),
     });
-    setMessages(prev => prev.filter(m => m.id !== id));
+    setMessages((prev) => prev.filter((m) => m.id !== id));
     if (selected?.id === id) setSelected(null);
   }
 
-  async function handleReply(messageId: string) {
+  async function handleReply() {
     if (!replyText.trim() || !selected) return;
     setReplying(true);
     try {
-      await fetch(`/api/email/${messageId}`, {
+      await fetch(`/api/email/${selected.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -152,241 +205,336 @@ export default function InboxPage() {
   }
 
   function selectMessage(msg: EmailMessage) {
-    setSelected(msg);
-    if (!msg.isRead) markRead(msg.id);
+    setSelected((prev) => (prev?.id === msg.id ? null : msg));
+    if (!msg.isRead && msg.direction === "inbound") markRead(msg.id);
   }
 
   const classification = selected?.classifications?.[0];
-  const aiDraft = selected?.aiDrafts?.find(d => d.status === "draft");
+  const aiDraft = selected?.aiDrafts?.find((d) => d.status === "draft");
 
   return (
-    <div className="flex gap-4" style={{ height: "calc(100vh - 240px)" }}>
-      {/* Left panel - message list */}
-      <div className="w-[400px] shrink-0 flex flex-col panel">
-        <div className="px-4 py-3 border-b border-border flex items-center gap-4">
-          <span className="text-[11px] text-muted uppercase tracking-wider font-medium">Inbox</span>
-          <div className="flex gap-3 ml-auto">
-            <span className="text-[11px]"><span className="text-info font-medium">{stats.unread}</span> <span className="text-muted">unread</span></span>
-            <span className="text-[11px]"><span className="text-warning font-medium">{stats.needsReply}</span> <span className="text-muted">needs reply</span></span>
-          </div>
+    <div className="flex gap-0" style={{ height: "calc(100vh - 180px)" }}>
+      {/* ── Message List ─────────────────────────────────────────── */}
+      <div className="w-[380px] shrink-0 flex flex-col panel mr-4">
+        {/* View switch */}
+        <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+          <button
+            onClick={() => { setView("inbox"); setSelected(null); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition ${
+              view === "inbox" ? "bg-accent text-white" : "text-muted hover:text-foreground"
+            }`}
+          >
+            <IconInbox size={13} /> Inbox
+            {unreadCount > 0 && (
+              <span className="ml-1 bg-white/20 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => { setView("sent"); setSelected(null); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition ${
+              view === "sent" ? "bg-accent text-white" : "text-muted hover:text-foreground"
+            }`}
+          >
+            <IconSend size={13} /> Sent
+          </button>
+          <button onClick={fetchMessages} className="ml-auto p-1.5 text-muted hover:text-foreground transition">
+            <IconRefresh size={13} />
+          </button>
         </div>
 
-        <div className="px-3 py-2 border-b border-border space-y-2">
+        {/* Search */}
+        <div className="px-3 py-2 border-b border-border">
           <div className="relative">
-            <IconSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <IconSearch size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input
               type="text"
-              placeholder="Search inbox..."
+              placeholder={view === "inbox" ? "Search inbox..." : "Search sent..."}
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
               className="input-field pl-9 !py-2 !text-[12px]"
             />
           </div>
-          <div className="flex gap-1">
-            {(["all", "unread", "important", "needs_reply", "ai_handled"] as InboxFilter[]).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`text-[11px] px-2 py-1 rounded-md transition cursor-pointer ${
-                  filter === f ? "bg-accent/10 text-accent" : "text-muted hover:text-foreground"
-                }`}
-              >
-                {f === "needs_reply" ? "Needs Reply" : f === "ai_handled" ? "AI Handled" : f.charAt(0).toUpperCase() + f.slice(1)}
-              </button>
-            ))}
-          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        {/* Message list */}
+        <div className="flex-1 overflow-y-auto divide-y divide-border">
           {loading ? (
-            <div className="p-8 text-center text-muted text-[13px]">Loading...</div>
-          ) : filteredMessages.length === 0 ? (
-            <div className="p-8 text-center text-muted text-[13px]">No messages</div>
+            <div className="p-8 text-center text-muted text-[12px]">Loading…</div>
+          ) : messages.length === 0 ? (
+            <div className="p-8 text-center text-muted text-[12px]">
+              {view === "inbox" ? "No messages in inbox" : "No sent emails yet"}
+            </div>
           ) : (
-            filteredMessages.map(msg => {
-              const cls = msg.classifications?.[0];
+            messages.map((msg) => {
+              const source = getTagSource(msg.tags);
+              const sc = STATUS_CONFIG[msg.status] || STATUS_CONFIG.sent;
+              const isSelected = selected?.id === msg.id;
               return (
-                <button
+                <div
                   key={msg.id}
                   onClick={() => selectMessage(msg)}
-                  className={`w-full text-left px-4 py-3 border-b border-border transition cursor-pointer ${
-                    selected?.id === msg.id ? "bg-accent/5" : "hover:bg-card-hover"
-                  } ${!msg.isRead ? "bg-card-elevated" : ""}`}
+                  className={`px-4 py-3 cursor-pointer transition group ${
+                    isSelected ? "bg-accent/10" : "hover:bg-surface"
+                  } ${!msg.isRead && msg.direction === "inbound" ? "bg-accent/5" : ""}`}
                 >
-                  <div className="flex items-start gap-2">
-                    <button onClick={e => { e.stopPropagation(); toggleStar(msg.id); }} className="mt-0.5 shrink-0 cursor-pointer">
-                      {msg.isStarred
-                        ? <IconStarFilled size={14} className="text-warning" />
-                        : <IconStar size={14} className="text-muted hover:text-warning" />}
-                    </button>
+                  <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        {!msg.isRead && <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />}
-                        <span className={`text-[13px] truncate ${!msg.isRead ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
-                          {msg.fromName || msg.fromEmail}
+                        {!msg.isRead && msg.direction === "inbound" && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                        )}
+                        <span className={`text-[13px] truncate ${!msg.isRead && msg.direction === "inbound" ? "font-semibold text-foreground" : "text-foreground/80"}`}>
+                          {view === "inbox" ? (msg.fromName || msg.fromEmail) : msg.toEmail}
                         </span>
-                        {cls && (
-                          <span className="ml-auto shrink-0">
-                            <span className={`w-1.5 h-1.5 rounded-full inline-block ${URGENCY_DOTS[cls.urgency] || "bg-muted"}`} />
+                      </div>
+                      <p className="text-[12px] text-foreground/70 truncate mt-0.5">{msg.subject}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {source && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent font-medium">
+                            {source}
+                          </span>
+                        )}
+                        {view === "sent" && (
+                          <span className={`text-[10px] font-medium ${sc.className}`}>
+                            {sc.label}
+                          </span>
+                        )}
+                        {view === "inbox" && classification && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded capitalize font-medium ${INTENT_BADGE[classification.intent] || "bg-surface text-muted"}`}>
+                            {classification.intent.replace("_", " ")}
                           </span>
                         )}
                       </div>
-                      <p className={`text-[12px] truncate mt-0.5 ${!msg.isRead ? "text-foreground" : "text-muted-foreground"}`}>
-                        {msg.subject}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        {cls?.label && (
-                          <span className={`badge !text-[10px] !px-1.5 !py-0.5 ${INTENT_COLORS[cls.intent] || "badge-muted"}`}>
-                            {cls.label}
-                          </span>
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <span className="text-[10px] text-muted">{fmt(msg.createdAt)}</span>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                        <button
+                          onClick={(e) => toggleStar(msg.id, e)}
+                          className="p-0.5 text-muted hover:text-yellow-400 transition"
+                        >
+                          {msg.isStarred ? <IconStarFilled size={12} className="text-yellow-400" /> : <IconStar size={12} />}
+                        </button>
+                        {view === "inbox" && (
+                          <button
+                            onClick={(e) => archiveMessage(msg.id, e)}
+                            className="p-0.5 text-muted hover:text-foreground transition"
+                          >
+                            <IconArchive size={12} />
+                          </button>
                         )}
-                        <span className="text-[10px] text-muted ml-auto">
-                          {new Date(msg.createdAt).toLocaleDateString()}
-                        </span>
                       </div>
                     </div>
                   </div>
-                </button>
+                </div>
               );
             })
           )}
         </div>
-
-        <div className="px-3 py-2 border-t border-border">
-          <button onClick={() => fetchMessages()} className="btn-ghost !py-1.5 !text-[11px] w-full justify-center cursor-pointer">
-            <IconRefresh size={12} /> Refresh
-          </button>
-        </div>
       </div>
 
-      {/* Right panel - message detail */}
-      <div className="flex-1 panel flex flex-col min-w-0">
-        {!selected ? (
-          <div className="flex-1 flex items-center justify-center text-muted text-[13px]">
-            <div className="text-center">
-              <InboxIcon size={40} className="mx-auto mb-3 opacity-20" />
-              <p>Select a message to view</p>
-              <p className="text-[11px] mt-1 opacity-60">AI classification and suggested replies appear here</p>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="px-5 py-4 border-b border-border">
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-[15px] font-semibold text-foreground truncate">{selected.subject}</h3>
-                  <p className="text-[12px] text-muted mt-1">
-                    From: <span className="text-muted-foreground">{selected.fromName || selected.fromEmail}</span>
-                    <span className="mx-2">·</span>
-                    To: <span className="text-muted-foreground">{selected.toEmail}</span>
-                    <span className="mx-2">·</span>
-                    {new Date(selected.createdAt).toLocaleString()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 ml-3">
-                  <button onClick={() => toggleStar(selected.id)} className="p-1.5 rounded-md hover:bg-card-hover transition cursor-pointer">
-                    {selected.isStarred ? <IconStarFilled size={16} className="text-warning" /> : <IconStar size={16} className="text-muted" />}
-                  </button>
-                  <button onClick={() => archiveMessage(selected.id)} className="p-1.5 rounded-md hover:bg-card-hover transition cursor-pointer">
-                    <IconArchive size={16} className="text-muted hover:text-foreground" />
-                  </button>
-                </div>
-              </div>
-
-              {classification && (
-                <div className="mt-3 p-3 rounded-lg bg-card-elevated border border-border">
-                  <div className="flex items-center gap-2 mb-2">
-                    <IconBrain size={14} className="text-accent" />
-                    <span className="text-[11px] font-medium text-accent uppercase tracking-wider">AI Analysis</span>
-                    <span className="text-[10px] text-muted ml-auto">{Math.round(classification.confidence * 100)}% confidence</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className={`badge !text-[10px] ${INTENT_COLORS[classification.intent] || "badge-muted"}`}>
-                      <IconTag size={10} /> {classification.intent.replace(/_/g, " ")}
-                    </span>
-                    {classification.sentiment && (
-                      <span className={`badge !text-[10px] ${
-                        classification.sentiment === "positive" ? "badge-success" :
-                        classification.sentiment === "negative" ? "badge-danger" : "badge-muted"
-                      }`}>
-                        {classification.sentiment}
-                      </span>
-                    )}
-                    <span className={`badge !text-[10px] ${
-                      classification.urgency === "urgent" ? "badge-danger" :
-                      classification.urgency === "high" ? "badge-warning" : "badge-muted"
-                    }`}>
-                      <IconClock size={10} /> {classification.urgency}
-                    </span>
-                    {classification.suggestedAction && (
-                      <span className="badge !text-[10px] badge-info">
-                        → {classification.suggestedAction.replace(/_/g, " ")}
-                      </span>
-                    )}
-                  </div>
-                  {classification.summary && (
-                    <p className="text-[12px] text-muted-foreground mt-2 leading-relaxed">{classification.summary}</p>
+      {/* ── Message Detail ──────────────────────────────────────── */}
+      {selected ? (
+        <div className="flex-1 min-w-0 panel flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-[15px] font-semibold text-foreground leading-tight">{selected.subject}</h3>
+                <div className="flex items-center gap-3 mt-1.5 flex-wrap text-[12px] text-muted">
+                  {selected.direction === "inbound" ? (
+                    <>
+                      <span>From: <span className="text-foreground/80">{selected.fromName ? `${selected.fromName} <${selected.fromEmail}>` : selected.fromEmail}</span></span>
+                      <span>To: <span className="text-foreground/80">{selected.toEmail}</span></span>
+                    </>
+                  ) : (
+                    <>
+                      <span>To: <span className="text-foreground/80">{selected.toEmail}</span></span>
+                      <span>From: <span className="text-foreground/80">{selected.fromEmail}</span></span>
+                    </>
                   )}
+                  <span>{fmtFull(selected.createdAt)}</span>
                 </div>
-              )}
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              {selected.bodyHtml ? (
-                <div className="text-[13px] leading-relaxed text-muted-foreground max-w-none"
-                  dangerouslySetInnerHTML={{ __html: selected.bodyHtml }}
-                />
-              ) : (
-                <pre className="text-[13px] leading-relaxed text-muted-foreground whitespace-pre-wrap">{selected.bodyText}</pre>
-              )}
-            </div>
-
-            {aiDraft && (
-              <div className="px-5 py-3 border-t border-border" style={{ background: "rgba(232,127,36,0.03)" }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <IconBrain size={14} className="text-accent" />
-                  <span className="text-[11px] font-medium text-accent">AI Suggested Reply</span>
-                  <div className="ml-auto flex gap-1">
-                    <button className="btn-primary !py-1 !px-2 !text-[11px]"><IconCheck size={12} /> Approve & Send</button>
-                    <button className="btn-ghost !py-1 !px-2 !text-[11px]"><IconX size={12} /> Reject</button>
-                  </div>
-                </div>
-                <div className="text-[12px] text-muted-foreground bg-card p-3 rounded-md border border-border"
-                  dangerouslySetInnerHTML={{ __html: aiDraft.bodyHtml }}
-                />
               </div>
-            )}
-
-            <div className="px-5 py-3 border-t border-border">
-              <div className="flex gap-2">
-                <textarea
-                  value={replyText}
-                  onChange={e => setReplyText(e.target.value)}
-                  placeholder="Type your reply..."
-                  className="input-field !py-2 !text-[12px] flex-1 resize-none"
-                  rows={2}
-                />
+              <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={() => handleReply(selected.id)}
-                  disabled={!replyText.trim() || replying}
-                  className="btn-primary !py-2 self-end cursor-pointer"
+                  onClick={(e) => toggleStar(selected.id, e)}
+                  className="p-1.5 text-muted hover:text-yellow-400 transition"
                 >
-                  <IconReply size={14} /> {replying ? "..." : "Reply"}
+                  {selected.isStarred ? <IconStarFilled size={15} className="text-yellow-400" /> : <IconStar size={15} />}
+                </button>
+                {selected.direction === "inbound" && (
+                  <button
+                    onClick={(e) => archiveMessage(selected.id, e)}
+                    className="p-1.5 text-muted hover:text-foreground transition"
+                    title="Archive"
+                  >
+                    <IconArchive size={15} />
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelected(null)}
+                  className="p-1.5 text-muted hover:text-foreground transition"
+                >
+                  <IconX size={15} />
                 </button>
               </div>
             </div>
-          </>
-        )}
-      </div>
+
+            {/* Status badges */}
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              {(() => {
+                const sc = STATUS_CONFIG[selected.status] || STATUS_CONFIG.sent;
+                const StatusIcon = selected.status === "opened" ? IconEye
+                  : selected.status === "clicked" ? IconZap
+                  : selected.status === "bounced" ? IconAlert
+                  : selected.status === "delivered" ? IconCheck
+                  : selected.status === "sent" || selected.status === "received" ? IconSend
+                  : null;
+                return (
+                  <span className={`flex items-center gap-1 text-[11px] font-medium ${sc.className}`}>
+                    {StatusIcon && <StatusIcon size={11} />}
+                    {sc.label}
+                  </span>
+                );
+              })()}
+              {getTagSource(selected.tags) && (
+                <span className="flex items-center gap-1 text-[11px] bg-accent/10 text-accent px-2 py-0.5 rounded-full">
+                  <IconTag size={10} /> {getTagSource(selected.tags)}
+                </span>
+              )}
+              {classification && (
+                <span className={`text-[11px] px-2 py-0.5 rounded-full capitalize font-medium ${INTENT_BADGE[classification.intent] || "bg-surface text-muted"}`}>
+                  <IconBrain size={10} className="inline mr-0.5" />
+                  {classification.intent.replace("_", " ")}
+                  {classification.urgency === "urgent" && " · urgent"}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* AI summary + action */}
+          {classification?.summary && (
+            <div className="mx-6 mt-4 px-4 py-3 bg-surface rounded-lg border border-border text-[12px] text-muted leading-relaxed flex items-start gap-2">
+              <IconBrain size={14} className="text-accent shrink-0 mt-0.5" />
+              <div>
+                <span className="font-medium text-foreground">AI: </span>
+                {classification.summary}
+                {classification.suggestedAction && (
+                  <span className="block mt-1 text-accent">
+                    → Suggested: {classification.suggestedAction.replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {selected.bodyHtml ? (
+              <div
+                className="prose prose-sm max-w-none text-foreground/90 text-[13px] leading-relaxed [&_a]:text-accent [&_a]:underline"
+                dangerouslySetInnerHTML={{ __html: selected.bodyHtml }}
+              />
+            ) : (
+              <pre className="text-[12px] text-muted whitespace-pre-wrap leading-relaxed font-sans">
+                {selected.bodyText || "(No content)"}
+              </pre>
+            )}
+          </div>
+
+          {/* Event timeline (delivery tracking) */}
+          {selected.events.length > 0 && (
+            <div className="px-6 py-3 border-t border-border bg-surface/50">
+              <p className="text-[10px] text-muted uppercase tracking-wider font-medium mb-2">Delivery Timeline</p>
+              <div className="flex items-center gap-0">
+                {selected.events.map((ev, i) => {
+                  const sc = STATUS_CONFIG[ev.type] || { label: ev.type, className: "text-muted" };
+                  const EventIcon = ev.type === "opened" ? IconEye
+                    : ev.type === "clicked" ? IconZap
+                    : ev.type === "bounced" ? IconAlert
+                    : ev.type === "delivered" ? IconCheck
+                    : ev.type === "sent" ? IconSend
+                    : IconClock;
+                  return (
+                    <div key={ev.id} className="flex items-center gap-0">
+                      <div className="flex flex-col items-center">
+                        <div className={`flex items-center gap-1 text-[11px] font-medium ${sc.className}`}>
+                          <EventIcon size={11} /> {sc.label}
+                        </div>
+                        <span className="text-[9px] text-muted">{fmt(ev.createdAt)}</span>
+                      </div>
+                      {i < selected.events.length - 1 && (
+                        <div className="w-6 h-px bg-border mx-1.5 self-start mt-2" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* AI draft banner */}
+          {aiDraft && (
+            <div className="px-6 py-3 border-t border-border bg-accent/5">
+              <p className="text-[11px] text-accent font-medium mb-2 flex items-center gap-1.5">
+                <IconBrain size={12} /> AI Draft Ready
+              </p>
+              <div
+                className="text-[12px] text-muted leading-relaxed line-clamp-3"
+                dangerouslySetInnerHTML={{ __html: aiDraft.bodyHtml }}
+              />
+            </div>
+          )}
+
+          {/* Reply box (inbox only) */}
+          {selected.direction === "inbound" && (
+            <div className="px-6 py-4 border-t border-border">
+              {aiDraft && (
+                <button
+                  onClick={() => setReplyText(aiDraft.bodyHtml.replace(/<[^>]+>/g, ""))}
+                  className="mb-2 text-[11px] text-accent hover:underline flex items-center gap-1"
+                >
+                  <IconBrain size={11} /> Use AI draft
+                </button>
+              )}
+              <div className="flex gap-2 items-end">
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder={`Reply to ${selected.fromEmail}…`}
+                  rows={3}
+                  className="input-field flex-1 resize-none text-[13px]"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleReply();
+                  }}
+                />
+                <button
+                  onClick={handleReply}
+                  disabled={replying || !replyText.trim()}
+                  className="btn-primary flex items-center gap-1.5 text-[13px] shrink-0"
+                >
+                  {replying ? <IconRefresh size={13} className="animate-spin" /> : <IconReply size={13} />}
+                  {replying ? "Sending…" : "Send"}
+                </button>
+              </div>
+              <p className="text-[10px] text-muted mt-1.5">⌘+Enter to send</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex-1 panel flex items-center justify-center">
+          <div className="text-center">
+            <IconInbox size={40} className="text-muted mx-auto mb-3 opacity-30" />
+            <p className="text-[13px] text-muted">
+              {view === "inbox" ? "Select a message to read" : "Select a sent email to view delivery status"}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function InboxIcon({ size, className }: { size: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
-      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
-    </svg>
-  );
-}

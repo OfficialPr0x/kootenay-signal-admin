@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get("status");
   const isArchived = searchParams.get("archived") === "true";
   const isStarred = searchParams.get("starred") === "true";
+  const leadId = searchParams.get("leadId");
   const limit = parseInt(searchParams.get("limit") || "50");
   const offset = parseInt(searchParams.get("offset") || "0");
 
@@ -17,10 +18,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(stats);
   }
 
-  // Build query
+  // Build query — include relations for full message detail
   let query = supabase
     .from("EmailMessage")
-    .select("*, EmailEvent(*), EmailCampaign(id, name)", { count: "exact" })
+    .select(
+      "*, EmailEvent(*), EmailCampaign(id, name), AiClassification(*), AiDraft(*)",
+      { count: "exact" }
+    )
     .order("createdAt", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -33,24 +37,37 @@ export async function GET(request: NextRequest) {
   if (isStarred) query = query.eq("isStarred", true);
   if (status) query = query.eq("status", status);
 
+  // Filter by lead ID — pitches store tags as "type:lead_pitch, lead_id:[id]"
+  if (leadId) {
+    query = query.ilike("tags", `%lead_id:${leadId}%`);
+  }
+
   if (search) {
-    query = query.or(`subject.ilike.%${search}%,fromEmail.ilike.%${search}%,toEmail.ilike.%${search}%,bodyText.ilike.%${search}%`);
+    query = query.or(
+      `subject.ilike.%${search}%,fromEmail.ilike.%${search}%,toEmail.ilike.%${search}%,bodyText.ilike.%${search}%`
+    );
   }
 
   const { data, count, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Reshape: rename EmailEvent -> events, EmailCampaign -> campaign, limit events to 5
+  // Reshape: flatten Supabase relation names to camelCase
   const messages = (data || []).map((m: Record<string, unknown>) => {
-    const { EmailEvent, EmailCampaign, ...rest } = m;
+    const { EmailEvent, EmailCampaign, AiClassification, AiDraft, ...rest } = m;
     return {
       ...rest,
-      events: (EmailEvent as unknown[] || []).slice(0, 5),
+      events: (EmailEvent as unknown[] || []).sort(
+        (a: unknown, b: unknown) =>
+          new Date((a as Record<string, string>).createdAt).getTime() -
+          new Date((b as Record<string, string>).createdAt).getTime()
+      ),
       campaign: EmailCampaign || null,
+      classifications: AiClassification as unknown[] || [],
+      aiDrafts: AiDraft as unknown[] || [],
     };
   });
 
-  // Unread count
+  // Unread count for the inbox badge
   const { count: unreadCount } = await supabase
     .from("EmailMessage")
     .select("*", { count: "exact", head: true })
@@ -58,7 +75,11 @@ export async function GET(request: NextRequest) {
     .eq("isRead", false)
     .eq("isArchived", false);
 
-  return NextResponse.json({ messages, total: count || 0, unreadCount: unreadCount || 0 });
+  return NextResponse.json({
+    messages,
+    total: count || 0,
+    unreadCount: unreadCount || 0,
+  });
 }
 
 export async function POST(request: NextRequest) {
