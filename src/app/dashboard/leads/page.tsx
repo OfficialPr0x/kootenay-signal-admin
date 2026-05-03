@@ -5,7 +5,8 @@ import {
   IconPlus, IconSearch, IconEdit, IconTrash, IconX, IconSend,
   IconGlobe, IconSparkles, IconBot, IconUpload,
   IconMapPin, IconBuilding, IconRefresh, IconCheck, IconAlert,
-  IconChevronRight, IconLink, IconFilter, IconEye, IconZap, IconClock,
+  IconLink, IconFilter, IconEye, IconZap, IconClock,
+  IconChevronDown, IconMail, IconPhone,
 } from "@/components/icons";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,13 +57,55 @@ interface DigitalAnalysis {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS = ["new", "contacted", "qualified", "converted", "lost"];
-const GRADE_COLORS: Record<string, string> = {
-  A: "text-emerald-400",
-  B: "text-green-400",
-  C: "text-yellow-400",
-  D: "text-orange-400",
-  F: "text-red-400",
+
+const STATUS_STYLE: Record<string, { badge: string; dot: string; label: string }> = {
+  new:       { badge: "bg-blue-500/15 text-blue-400 border border-blue-500/25",         dot: "bg-blue-400",     label: "New" },
+  contacted: { badge: "bg-yellow-500/15 text-yellow-400 border border-yellow-500/25",   dot: "bg-yellow-400",   label: "Contacted" },
+  qualified: { badge: "bg-accent/15 text-accent border border-accent/25",               dot: "bg-accent",       label: "Qualified" },
+  converted: { badge: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25", dot: "bg-emerald-400", label: "Converted" },
+  lost:      { badge: "bg-red-500/15 text-red-400 border border-red-500/25",            dot: "bg-red-400",      label: "Lost" },
 };
+
+const GRADE_CONFIG: Record<string, { color: string; bg: string; ring: string }> = {
+  A: { color: "text-emerald-400", bg: "bg-emerald-500/10", ring: "ring-emerald-500/30" },
+  B: { color: "text-green-400",   bg: "bg-green-500/10",   ring: "ring-green-500/30" },
+  C: { color: "text-yellow-400",  bg: "bg-yellow-500/10",  ring: "ring-yellow-500/30" },
+  D: { color: "text-orange-400",  bg: "bg-orange-500/10",  ring: "ring-orange-500/30" },
+  F: { color: "text-red-400",     bg: "bg-red-500/10",     ring: "ring-red-500/30" },
+};
+
+const AVATAR_GRADIENTS = [
+  "from-accent to-orange-600",
+  "from-blue-500 to-blue-700",
+  "from-emerald-500 to-teal-700",
+  "from-purple-500 to-purple-700",
+  "from-rose-500 to-rose-700",
+  "from-amber-500 to-amber-700",
+];
+
+function getGradient(str: string) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffff;
+  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length];
+}
+
+function initials(name: string, business: string | null) {
+  const s = business || name;
+  const parts = s.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return s.slice(0, 2).toUpperCase();
+}
+
+function timeAgo(dateStr: string) {
+  const d = new Date(dateStr);
+  const diff = Date.now() - d.getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -72,12 +115,10 @@ export default function LeadsPage() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [showFindLeads, setShowFindLeads] = useState(false);
-
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [pitching, setPitching] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
@@ -178,11 +219,19 @@ export default function LeadsPage() {
     fetchLeads();
   }
 
+  // Pipeline counts
+  const allLeads = leads;
+  const counts = allLeads.reduce((acc, l) => {
+    acc[l.status] = (acc[l.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
   return (
-    <div className="flex gap-0 h-full">
+    <div className="flex gap-0 h-full overflow-hidden">
       {/* ── Main Panel ─────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between page-header">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
             <h2 className="page-title">Leads</h2>
             <p className="page-subtitle">Manage, find, and convert prospects</p>
@@ -194,144 +243,107 @@ export default function LeadsPage() {
             <button onClick={() => setShowFindLeads(true)} className="btn-ghost flex items-center gap-1.5 text-[13px]">
               <IconSparkles size={14} /> Find Leads
             </button>
-            <button onClick={() => { setEditingLead(null); setShowAddForm(true); }} className="btn-primary">
+            <button
+              onClick={() => { setEditingLead(null); setShowAddForm(true); }}
+              className="btn-primary flex items-center gap-1.5"
+            >
               <IconPlus size={14} /> Add Lead
             </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="relative flex-1 max-w-xs">
+        {/* Pipeline Stats Bar */}
+        <div className="grid grid-cols-5 gap-3 mb-5 shrink-0">
+          {STATUS_OPTIONS.map((s) => {
+            const st = STATUS_STYLE[s];
+            const cnt = counts[s] || 0;
+            const isActive = filter === s;
+            return (
+              <button
+                key={s}
+                onClick={() => setFilter(isActive ? "all" : s)}
+                className={`rounded-xl border p-3.5 text-left transition ${
+                  isActive
+                    ? "bg-accent/10 border-accent/40"
+                    : "bg-surface/50 border-border hover:border-border/80 hover:bg-surface"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`w-2 h-2 rounded-full ${st.dot}`} />
+                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${isActive ? "text-accent" : "text-muted"}`}>
+                    {s}
+                  </span>
+                </div>
+                <div className={`text-2xl font-black ${isActive ? "text-accent" : "text-foreground"}`}>{cnt}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search + filter row */}
+        <div className="flex items-center gap-3 mb-4 shrink-0">
+          <div className="relative flex-1 max-w-sm">
             <IconSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input
-              type="text" placeholder="Search leads..."
-              value={search} onChange={(e) => setSearch(e.target.value)}
+              type="text"
+              placeholder="Search leads, businesses, emails…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               className="input-field pl-9 text-[13px]"
             />
           </div>
-          <div className="tab-list">
-            {["all", ...STATUS_OPTIONS].map((s) => (
-              <button key={s} onClick={() => setFilter(s)} className={`tab-item ${filter === s ? "active" : ""}`}>{s}</button>
-            ))}
-          </div>
-          <button onClick={fetchLeads} className="btn-ghost p-2" title="Refresh"><IconRefresh size={14} /></button>
+          <button
+            onClick={() => setFilter("all")}
+            className={`text-[12px] px-3 py-2 rounded-lg border transition ${
+              filter === "all" ? "bg-foreground/10 border-border text-foreground" : "border-transparent text-muted hover:text-foreground"
+            }`}
+          >
+            All ({allLeads.length})
+          </button>
+          <button onClick={fetchLeads} className="p-2 text-muted hover:text-foreground transition" title="Refresh">
+            <IconRefresh size={14} />
+          </button>
         </div>
 
-        <div className="panel">
+        {/* Lead list */}
+        <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <p className="px-5 py-12 text-center text-muted text-[13px]">Loading...</p>
+            <div className="flex items-center justify-center h-40">
+              <IconRefresh size={20} className="text-muted animate-spin" />
+            </div>
           ) : leads.length === 0 ? (
-            <div className="px-5 py-16 text-center">
-              <IconFilter size={32} className="text-muted mx-auto mb-3 opacity-40" />
-              <p className="text-muted text-[13px]">No leads found</p>
+            <div className="flex flex-col items-center justify-center h-60 panel rounded-2xl">
+              <IconFilter size={36} className="text-muted mb-3 opacity-25" />
+              <p className="text-[14px] font-medium text-muted">No leads found</p>
               <p className="text-[12px] text-muted opacity-60 mt-1">Import a CSV or use Find Leads to discover prospects</p>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => setShowImport(true)} className="btn-ghost text-[13px] flex items-center gap-1.5">
+                  <IconUpload size={13} /> Import CSV
+                </button>
+                <button onClick={() => setShowFindLeads(true)} className="btn-primary text-[13px] flex items-center gap-1.5">
+                  <IconSparkles size={13} /> Find Leads
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="brand-table">
-                <thead>
-                  <tr>
-                    <th>Name / Business</th>
-                    <th>Email</th>
-                    <th>Industry</th>
-                    <th>Status</th>
-                    <th>Analysis</th>
-                    <th>Pitch</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leads.map((lead) => (
-                    <tr
-                      key={lead.id}
-                      className={`cursor-pointer ${selectedLead?.id === lead.id ? "bg-accent/5" : ""}`}
-                      onClick={() => setSelectedLead(selectedLead?.id === lead.id ? null : lead)}
-                    >
-                      <td>
-                        <div className="font-medium text-foreground text-[13px]">{lead.name}</div>
-                        {lead.business && <div className="text-[11px] text-muted">{lead.business}</div>}
-                      </td>
-                      <td className="text-[12px]">{lead.email}</td>
-                      <td className="text-[12px] text-muted">{lead.industry || "—"}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <select
-                          value={lead.status}
-                          onChange={(e) => handleStatusChange(lead.id, e.target.value)}
-                          className="bg-background border border-border rounded-md px-2 py-1.5 text-[12px] cursor-pointer focus:outline-none focus:border-accent text-muted-foreground"
-                        >
-                          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        {lead.analysis ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-[13px] font-bold ${GRADE_COLORS[(lead.analysis as DigitalAnalysis).overallGrade] || "text-muted"}`}>
-                              {(lead.analysis as DigitalAnalysis).overallGrade}
-                            </span>
-                            <span className="text-[11px] text-muted">{(lead.analysis as DigitalAnalysis).overallScore}/100</span>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleAnalyze(lead)}
-                            disabled={analyzing === lead.id}
-                            className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 disabled:opacity-50 transition cursor-pointer"
-                          >
-                            {analyzing === lead.id ? "Scanning…" : <><IconGlobe size={12} /> Analyze</>}
-                          </button>
-                        )}
-                      </td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        {lead.pitchSentAt ? (
-                          <span className="flex items-center gap-1 text-[11px] text-emerald-400">
-                            <IconCheck size={11} /> Sent
-                          </span>
-                        ) : lead.pitchDraft ? (
-                          <button
-                            onClick={() => handleSendPitch(lead)}
-                            disabled={sending === lead.id}
-                            className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 disabled:opacity-50 transition cursor-pointer"
-                          >
-                            {sending === lead.id ? "Sending…" : <><IconSend size={11} /> Send</>}
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleDraftPitch(lead)}
-                            disabled={pitching === lead.id}
-                            className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 disabled:opacity-50 transition cursor-pointer"
-                          >
-                            {pitching === lead.id ? "Writing…" : <><IconBot size={11} /> Draft Pitch</>}
-                          </button>
-                        )}
-                      </td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => { setEditingLead(lead); setShowAddForm(true); }}
-                            className="p-1.5 rounded-md text-muted hover:text-accent hover:bg-accent-dim transition cursor-pointer"
-                            title="Edit"
-                          >
-                            <IconEdit size={13} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(lead.id)}
-                            className="p-1.5 rounded-md text-muted hover:text-danger hover:bg-danger-dim transition cursor-pointer"
-                            title="Delete"
-                          >
-                            <IconTrash size={13} />
-                          </button>
-                          <button
-                            onClick={() => setSelectedLead(selectedLead?.id === lead.id ? null : lead)}
-                            className="p-1.5 rounded-md text-muted hover:text-foreground hover:bg-accent-dim transition cursor-pointer"
-                            title="View details"
-                          >
-                            <IconChevronRight size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-2">
+              {leads.map((lead) => (
+                <LeadRow
+                  key={lead.id}
+                  lead={lead}
+                  isSelected={selectedLead?.id === lead.id}
+                  isAnalyzing={analyzing === lead.id}
+                  isPitching={pitching === lead.id}
+                  isSending={sending === lead.id}
+                  onSelect={() => setSelectedLead(selectedLead?.id === lead.id ? null : lead)}
+                  onStatusChange={(s) => handleStatusChange(lead.id, s)}
+                  onAnalyze={() => handleAnalyze(lead)}
+                  onDraftPitch={() => handleDraftPitch(lead)}
+                  onSendPitch={() => handleSendPitch(lead)}
+                  onEdit={() => { setEditingLead(lead); setShowAddForm(true); }}
+                  onDelete={() => handleDelete(lead.id)}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -367,15 +379,205 @@ export default function LeadsPage() {
   );
 }
 
+// ─── Lead Row ────────────────────────────────────────────────────────────────
+
+function LeadRow({
+  lead, isSelected, isAnalyzing, isPitching, isSending,
+  onSelect, onStatusChange, onAnalyze, onDraftPitch, onSendPitch, onEdit, onDelete,
+}: {
+  lead: Lead;
+  isSelected: boolean;
+  isAnalyzing: boolean;
+  isPitching: boolean;
+  isSending: boolean;
+  onSelect: () => void;
+  onStatusChange: (s: string) => void;
+  onAnalyze: () => void;
+  onDraftPitch: () => void;
+  onSendPitch: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const analysis = lead.analysis as DigitalAnalysis | null;
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const st = STATUS_STYLE[lead.status] || STATUS_STYLE.new;
+  const grade = analysis ? GRADE_CONFIG[analysis.overallGrade] : null;
+
+  useEffect(() => {
+    function close(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowStatusMenu(false);
+    }
+    if (showStatusMenu) document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [showStatusMenu]);
+
+  return (
+    <div
+      className={`group relative rounded-xl border transition cursor-pointer ${
+        isSelected
+          ? "border-accent/50 bg-accent/5 shadow-sm shadow-accent/10"
+          : "border-border bg-surface/30 hover:border-border/80 hover:bg-surface/60"
+      }`}
+      onClick={onSelect}
+    >
+      <div className="flex items-center gap-4 px-4 py-3.5">
+        {/* Avatar */}
+        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${getGradient(lead.business || lead.name)} flex items-center justify-center shrink-0`}>
+          <span className="text-white font-bold text-[13px]">{initials(lead.name, lead.business)}</span>
+        </div>
+
+        {/* Name + details */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[14px] font-semibold text-foreground leading-tight">
+              {lead.business || lead.name}
+            </span>
+            {lead.business && lead.name !== lead.business && (
+              <span className="text-[12px] text-muted">{lead.name}</span>
+            )}
+            {lead.industry && (
+              <span className="text-[11px] text-muted bg-background/60 border border-border px-1.5 py-0.5 rounded-md">
+                {lead.industry}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+            {lead.email && (
+              <span className="flex items-center gap-1 text-[11px] text-muted">
+                <IconMail size={10} /> {lead.email}
+              </span>
+            )}
+            {lead.phone && (
+              <span className="flex items-center gap-1 text-[11px] text-muted">
+                <IconPhone size={10} /> {lead.phone}
+              </span>
+            )}
+            {lead.websiteUrl && (
+              <a
+                href={lead.websiteUrl.startsWith("http") ? lead.websiteUrl : `https://${lead.websiteUrl}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] text-accent hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <IconGlobe size={10} /> {lead.websiteUrl.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}
+              </a>
+            )}
+            <span className="text-[10px] text-muted/60">{timeAgo(lead.createdAt)}</span>
+          </div>
+        </div>
+
+        {/* Grade badge */}
+        {grade && analysis ? (
+          <div className={`w-9 h-9 rounded-lg ring-1 ${grade.bg} ${grade.ring} flex flex-col items-center justify-center shrink-0`}>
+            <span className={`text-[14px] font-black ${grade.color}`}>{analysis.overallGrade}</span>
+            <span className="text-[8px] text-muted leading-none">{analysis.overallScore}</span>
+          </div>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAnalyze(); }}
+            disabled={isAnalyzing}
+            className="w-9 h-9 rounded-lg border border-dashed border-border flex items-center justify-center shrink-0 text-muted hover:border-accent/50 hover:text-accent transition"
+            title="Analyze digital footprint"
+          >
+            {isAnalyzing ? <IconRefresh size={13} className="animate-spin" /> : <IconGlobe size={13} />}
+          </button>
+        )}
+
+        {/* Pitch status */}
+        <div className="shrink-0 w-20 flex justify-center" onClick={(e) => e.stopPropagation()}>
+          {lead.pitchSentAt ? (
+            <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
+              <IconCheck size={11} /> Sent
+            </span>
+          ) : lead.pitchDraft ? (
+            <button
+              onClick={onSendPitch}
+              disabled={isSending}
+              className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 font-medium transition"
+            >
+              {isSending
+                ? <><IconRefresh size={11} className="animate-spin" /> Sending…</>
+                : <><IconSend size={11} /> Send</>}
+            </button>
+          ) : (
+            <button
+              onClick={onDraftPitch}
+              disabled={isPitching}
+              className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 font-medium transition"
+            >
+              {isPitching
+                ? <><IconRefresh size={11} className="animate-spin" /> Writing…</>
+                : <><IconBot size={11} /> Draft</>}
+            </button>
+          )}
+        </div>
+
+        {/* Status badge with dropdown */}
+        <div className="relative shrink-0" ref={menuRef} onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setShowStatusMenu((v) => !v)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition ${st.badge}`}
+          >
+            {st.label} <IconChevronDown size={10} />
+          </button>
+          {showStatusMenu && (
+            <div className="absolute right-0 top-full mt-1 z-20 w-36 panel py-1 shadow-xl fade-in rounded-xl">
+              {STATUS_OPTIONS.map((s) => {
+                const ss = STATUS_STYLE[s];
+                return (
+                  <button
+                    key={s}
+                    onClick={() => { onStatusChange(s); setShowStatusMenu(false); }}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-surface transition ${
+                      lead.status === s ? "text-foreground" : "text-muted"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ss.dot}`} />
+                    {ss.label}
+                    {lead.status === s && <IconCheck size={11} className="ml-auto text-accent" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Action buttons */}
+        <div
+          className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={onEdit}
+            className="p-1.5 rounded-lg text-muted hover:text-accent hover:bg-accent/10 transition"
+            title="Edit"
+          >
+            <IconEdit size={13} />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-red-500/10 transition"
+            title="Delete"
+          >
+            <IconTrash size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Pitch Email Status ───────────────────────────────────────────────────────
 
 const PITCH_STATUS_CONFIG: Record<string, { label: string; className: string; border: string }> = {
-  sent:      { label: "Sent",      className: "text-muted",   border: "border-border" },
-  delivered: { label: "Delivered", className: "text-blue-400", border: "border-blue-500/30" },
-  opened:    { label: "Opened",    className: "text-yellow-400", border: "border-yellow-500/30" },
+  sent:      { label: "Sent",      className: "text-muted",       border: "border-border" },
+  delivered: { label: "Delivered", className: "text-blue-400",    border: "border-blue-500/30" },
+  opened:    { label: "Opened",    className: "text-yellow-400",  border: "border-yellow-500/30" },
   clicked:   { label: "Clicked",   className: "text-emerald-400", border: "border-emerald-500/30" },
-  bounced:   { label: "Bounced",   className: "text-red-400", border: "border-red-500/30" },
-  failed:    { label: "Failed",    className: "text-red-400", border: "border-red-500/30" },
+  bounced:   { label: "Bounced",   className: "text-red-400",     border: "border-red-500/30" },
+  failed:    { label: "Failed",    className: "text-red-400",     border: "border-red-500/30" },
 };
 
 interface PitchEvent {
@@ -395,10 +597,7 @@ function PitchEmailStatus({ leadId, sentAt }: { leadId: string; sentAt: string }
       const res = await fetch(`/api/email?leadId=${leadId}&view=sent&limit=1`);
       const data = await res.json();
       const msg = data.messages?.[0];
-      if (msg) {
-        setStatus(msg.status || "sent");
-        setEvents(msg.events || []);
-      }
+      if (msg) { setStatus(msg.status || "sent"); setEvents(msg.events || []); }
     } catch { /* empty */ }
     setLoading(false);
   }, [leadId]);
@@ -410,9 +609,9 @@ function PitchEmailStatus({ leadId, sentAt }: { leadId: string; sentAt: string }
     new Date(d).toLocaleString("en-CA", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
   return (
-    <div className={`rounded-lg border px-3 py-2.5 text-[12px] ${sc.border} bg-surface/50`}>
+    <div className={`rounded-xl border px-4 py-3 text-[12px] ${sc.border} bg-surface/50`}>
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <IconCheck size={13} className="text-emerald-400 shrink-0" />
           <span className="text-muted">Sent {new Date(sentAt).toLocaleDateString()}</span>
           <span className="text-border">·</span>
@@ -423,7 +622,7 @@ function PitchEmailStatus({ leadId, sentAt }: { leadId: string; sentAt: string }
               : status === "delivered" ? IconCheck
               : IconClock;
             return (
-              <span className={`flex items-center gap-1 font-medium ${sc.className}`}>
+              <span className={`flex items-center gap-1 font-semibold ${sc.className}`}>
                 <StatusIcon size={11} /> {sc.label}
               </span>
             );
@@ -434,8 +633,8 @@ function PitchEmailStatus({ leadId, sentAt }: { leadId: string; sentAt: string }
         </button>
       </div>
       {events.length > 0 && (
-        <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border flex-wrap">
-          {events.slice(-4).map((ev) => {
+        <div className="flex items-center gap-4 mt-2.5 pt-2.5 border-t border-border flex-wrap">
+          {events.slice(-5).map((ev) => {
             const esc = PITCH_STATUS_CONFIG[ev.type] || { label: ev.type, className: "text-muted", border: "" };
             return (
               <span key={ev.id} className={`text-[10px] ${esc.className}`}>
@@ -471,39 +670,57 @@ function LeadDrawer({
     lead.pitchDraft ? "pitch" : lead.analysis ? "analysis" : "info"
   );
   const [editedPitch, setEditedPitch] = useState(lead.pitchDraft || "");
+  const grade = analysis ? GRADE_CONFIG[analysis.overallGrade] : null;
 
   useEffect(() => { setEditedPitch(lead.pitchDraft || ""); }, [lead.pitchDraft]);
 
   return (
-    <div className="w-[420px] shrink-0 border-l border-border h-full overflow-y-auto flex flex-col bg-background fade-in">
-      <div className="flex items-start justify-between p-5 border-b border-border sticky top-0 bg-background z-10">
-        <div>
-          <h3 className="font-semibold text-[14px] text-foreground">{lead.name}</h3>
-          <p className="text-[12px] text-muted mt-0.5">{lead.business || lead.email}</p>
+    <div className="w-[440px] shrink-0 ml-5 h-full overflow-hidden flex flex-col bg-background border border-border rounded-2xl fade-in">
+      <div className="h-1.5 bg-gradient-to-r from-accent to-orange-500 rounded-t-2xl shrink-0" />
+
+      {/* Drawer header */}
+      <div className="flex items-start gap-3 px-5 pt-4 pb-4 border-b border-border shrink-0">
+        <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${getGradient(lead.business || lead.name)} flex items-center justify-center shrink-0`}>
+          <span className="text-white font-bold text-[14px]">{initials(lead.name, lead.business)}</span>
         </div>
-        <div className="flex items-center gap-1 ml-2">
-          <button onClick={onEdit} className="p-1.5 text-muted hover:text-accent transition cursor-pointer" title="Edit">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-[15px] text-foreground leading-tight truncate">
+            {lead.business || lead.name}
+          </h3>
+          <p className="text-[12px] text-muted truncate mt-0.5">
+            {lead.business ? lead.name : lead.email}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {grade && analysis && (
+            <div className={`w-8 h-8 rounded-lg ring-1 ${grade.bg} ${grade.ring} flex items-center justify-center mr-1`}>
+              <span className={`text-[13px] font-black ${grade.color}`}>{analysis.overallGrade}</span>
+            </div>
+          )}
+          <button onClick={onEdit} className="p-1.5 rounded-lg text-muted hover:text-accent hover:bg-accent/10 transition">
             <IconEdit size={14} />
           </button>
-          <button onClick={onClose} className="p-1.5 text-muted hover:text-foreground transition cursor-pointer">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-surface transition">
             <IconX size={16} />
           </button>
         </div>
       </div>
 
-      <div className="flex border-b border-border px-5">
+      {/* Tabs */}
+      <div className="flex border-b border-border px-5 shrink-0">
         {(["info", "analysis", "pitch"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`py-2.5 px-3 text-[12px] font-medium capitalize border-b-2 transition -mb-px ${
+            className={`py-3 px-3 text-[12px] font-medium capitalize border-b-2 transition -mb-px ${
               activeTab === tab ? "border-accent text-accent" : "border-transparent text-muted hover:text-foreground"
             }`}
           >
             {tab === "analysis" && analysis && (
-              <span className={`mr-1 font-bold ${GRADE_COLORS[analysis.overallGrade] || ""}`}>
-                {analysis.overallGrade}
-              </span>
+              <span className={`mr-1.5 font-bold ${grade?.color || ""}`}>{analysis.overallGrade}</span>
+            )}
+            {tab === "pitch" && lead.pitchSentAt && (
+              <span className="mr-1.5 text-emerald-400">✓</span>
             )}
             {tab}
           </button>
@@ -511,78 +728,130 @@ function LeadDrawer({
       </div>
 
       <div className="flex-1 overflow-y-auto p-5">
+
+        {/* ── Info Tab ── */}
         {activeTab === "info" && (
-          <div className="space-y-4">
-            <InfoRow icon={<IconBuilding size={13} />} label="Business" value={lead.business} />
-            <InfoRow icon={<IconFilter size={13} />} label="Industry" value={lead.industry} />
-            <InfoRow icon={<IconGlobe size={13} />} label="Website" value={lead.websiteUrl} isLink />
-            <InfoRow icon={<IconLink size={13} />} label="LinkedIn" value={lead.linkedinUrl} isLink />
-            <InfoRow icon={<IconFilter size={13} />} label="Phone" value={lead.phone} />
-            <InfoRow icon={<IconFilter size={13} />} label="Source" value={lead.source} />
-            {lead.notes && (
-              <div className="bg-surface rounded-lg p-3 text-[12px] text-muted leading-relaxed">{lead.notes}</div>
-            )}
-            {lead.message && (
-              <div>
-                <p className="text-[11px] text-muted mb-1 uppercase tracking-wide">Message</p>
-                <div className="bg-surface rounded-lg p-3 text-[12px] text-muted leading-relaxed">{lead.message}</div>
+          <div className="space-y-5">
+            {/* Quick contact actions */}
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href={`mailto:${lead.email}`}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border bg-surface/50 hover:border-accent/40 hover:bg-accent/5 transition text-[12px] text-muted hover:text-accent"
+              >
+                <IconMail size={13} /> {lead.email.length > 20 ? lead.email.slice(0, 18) + "…" : lead.email}
+              </a>
+              {lead.phone ? (
+                <a
+                  href={`tel:${lead.phone}`}
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border bg-surface/50 hover:border-accent/40 hover:bg-accent/5 transition text-[12px] text-muted hover:text-accent"
+                >
+                  <IconPhone size={13} /> {lead.phone}
+                </a>
+              ) : (
+                <div className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border/50 bg-surface/20 text-[12px] text-muted/40">
+                  <IconPhone size={13} /> No phone
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <InfoRow icon={<IconBuilding size={13} />} label="Business" value={lead.business} />
+              <InfoRow icon={<IconFilter size={13} />}   label="Industry" value={lead.industry} />
+              <InfoRow icon={<IconGlobe size={13} />}    label="Website"  value={lead.websiteUrl} isLink />
+              <InfoRow icon={<IconLink size={13} />}     label="LinkedIn" value={lead.linkedinUrl} isLink />
+              <InfoRow icon={<IconFilter size={13} />}   label="Source"   value={lead.source} />
+            </div>
+
+            {(lead.notes || lead.message) && (
+              <div className="space-y-2">
+                {lead.notes && (
+                  <div className="rounded-xl bg-surface border border-border p-3.5 text-[12px] text-muted leading-relaxed">
+                    {lead.notes}
+                  </div>
+                )}
+                {lead.message && (
+                  <div>
+                    <p className="text-[10px] text-muted uppercase tracking-wider mb-1.5">Message</p>
+                    <div className="rounded-xl bg-surface border border-border p-3.5 text-[12px] text-muted leading-relaxed">
+                      {lead.message}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-            <div className="text-[11px] text-muted">
+
+            <p className="text-[11px] text-muted/60">
               Added {new Date(lead.createdAt).toLocaleDateString()}
               {lead.pitchSentAt && <> · Pitched {new Date(lead.pitchSentAt).toLocaleDateString()}</>}
-            </div>
-            <div className="flex flex-col gap-2 pt-2">
+            </p>
+
+            <div className="flex flex-col gap-2 pt-1">
               {!analysis && (
                 <button onClick={onAnalyze} disabled={analyzing} className="btn-ghost w-full flex items-center justify-center gap-2 text-[13px]">
-                  {analyzing ? <><IconRefresh size={14} className="animate-spin" /> Scanning digital footprint…</> : <><IconGlobe size={14} /> Analyze Digital Footprint</>}
+                  {analyzing
+                    ? <><IconRefresh size={14} className="animate-spin" /> Scanning…</>
+                    : <><IconGlobe size={14} /> Analyze Digital Footprint</>}
                 </button>
               )}
               {!lead.pitchDraft && (
                 <button onClick={onDraftPitch} disabled={pitching} className="btn-primary w-full flex items-center justify-center gap-2 text-[13px]">
-                  {pitching ? <><IconRefresh size={14} className="animate-spin" /> Writing pitch…</> : <><IconBot size={14} /> Draft Pitch with AI</>}
+                  {pitching
+                    ? <><IconRefresh size={14} className="animate-spin" /> Writing pitch…</>
+                    : <><IconBot size={14} /> Draft Pitch with AI</>}
                 </button>
               )}
             </div>
           </div>
         )}
 
+        {/* ── Analysis Tab ── */}
         {activeTab === "analysis" && (
           <div className="space-y-5">
             {!analysis ? (
-              <div className="text-center py-10">
-                <IconGlobe size={36} className="text-muted mx-auto mb-3 opacity-40" />
-                <p className="text-[13px] text-muted mb-4">No digital analysis yet</p>
+              <div className="text-center py-12">
+                <div className="w-16 h-16 rounded-2xl bg-surface border border-border flex items-center justify-center mx-auto mb-4">
+                  <IconGlobe size={28} className="text-muted opacity-40" />
+                </div>
+                <p className="text-[14px] font-semibold text-foreground mb-1">No analysis yet</p>
+                <p className="text-[12px] text-muted mb-5">Scan their digital presence to find opportunities</p>
                 <button onClick={onAnalyze} disabled={analyzing} className="btn-primary flex items-center gap-2 mx-auto">
-                  {analyzing ? <><IconRefresh size={14} className="animate-spin" /> Analyzing…</> : <><IconGlobe size={14} /> Run Analysis</>}
+                  {analyzing
+                    ? <><IconRefresh size={14} className="animate-spin" /> Analyzing…</>
+                    : <><IconGlobe size={14} /> Run Analysis</>}
                 </button>
               </div>
             ) : (
               <>
-                <div className="bg-surface rounded-xl p-4 text-center">
-                  <div className={`text-5xl font-black ${GRADE_COLORS[analysis.overallGrade] || "text-foreground"}`}>
+                <div className={`rounded-2xl p-5 text-center ${grade?.bg || "bg-surface"}`}>
+                  <div className={`text-6xl font-black mb-1 ${grade?.color || "text-foreground"}`}>
                     {analysis.overallGrade}
                   </div>
-                  <div className="text-[13px] text-muted mt-1">Digital Health Score: {analysis.overallScore}/100</div>
-                  <p className="text-[12px] text-muted mt-2 leading-relaxed">{analysis.summary}</p>
+                  <div className="text-[12px] text-muted font-medium">
+                    Digital Health Score: {analysis.overallScore}/100
+                  </div>
+                  <p className="text-[12px] text-muted mt-3 leading-relaxed max-w-[320px] mx-auto">
+                    {analysis.summary}
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <AnalysisCard label="Website" value={analysis.websiteQuality} sub={analysis.websiteNotes} />
-                  <AnalysisCard label="SEO" value={analysis.seoScore} sub={analysis.seoNotes} />
+                <div className="grid grid-cols-2 gap-2.5">
+                  <AnalysisCard label="Website"         value={analysis.websiteQuality}        sub={analysis.websiteNotes} />
+                  <AnalysisCard label="SEO"             value={analysis.seoScore}              sub={analysis.seoNotes} />
                   <AnalysisCard label="Google Business" value={analysis.googleBusinessProfile} sub={`${analysis.googleReviewCount} reviews · ${analysis.googleRating}★`} />
-                  <AnalysisCard label="Social Media" value={analysis.socialPresence} sub={analysis.socialNotes} />
-                  <AnalysisCard label="Paid Ads" value={analysis.paidAds} sub={analysis.adsNotes} />
-                  <AnalysisCard label="Ad Spend Est." value={analysis.estimatedMonthlyAdSpend} sub="" />
+                  <AnalysisCard label="Social Media"    value={analysis.socialPresence}        sub={analysis.socialNotes} />
+                  <AnalysisCard label="Paid Ads"        value={analysis.paidAds}               sub={analysis.adsNotes} />
+                  <AnalysisCard label="Ad Spend Est."   value={analysis.estimatedMonthlyAdSpend} sub="" />
                 </div>
 
                 {analysis.socialMedia && Object.values(analysis.socialMedia).some(Boolean) && (
                   <div>
-                    <p className="text-[11px] text-muted mb-2 uppercase tracking-wide">Social Profiles</p>
+                    <p className="text-[10px] text-muted uppercase tracking-wider mb-2">Social Profiles</p>
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(analysis.socialMedia).filter(([, url]) => url).map(([platform, url]) => (
                         <a key={platform} href={url} target="_blank" rel="noopener noreferrer"
-                          className="text-[11px] text-accent hover:underline capitalize">{platform}</a>
+                          className="text-[11px] text-accent hover:underline capitalize bg-accent/10 px-2 py-1 rounded-lg">
+                          {platform}
+                        </a>
                       ))}
                     </div>
                   </div>
@@ -590,13 +859,13 @@ function LeadDrawer({
 
                 {analysis.painPoints?.length > 0 && (
                   <div>
-                    <p className="text-[11px] text-muted mb-2 uppercase tracking-wide flex items-center gap-1.5">
-                      <IconAlert size={12} className="text-orange-400" /> Pain Points
+                    <p className="text-[10px] text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <IconAlert size={11} className="text-orange-400" /> Pain Points
                     </p>
-                    <ul className="space-y-1.5">
+                    <ul className="space-y-2">
                       {analysis.painPoints.map((p, i) => (
-                        <li key={i} className="text-[12px] text-muted flex items-start gap-2">
-                          <span className="text-orange-400 mt-0.5">•</span>{p}
+                        <li key={i} className="flex items-start gap-2.5 text-[12px] text-muted bg-orange-500/5 border border-orange-500/15 rounded-lg px-3 py-2 leading-relaxed">
+                          <span className="text-orange-400 shrink-0 mt-0.5">!</span>{p}
                         </li>
                       ))}
                     </ul>
@@ -605,13 +874,13 @@ function LeadDrawer({
 
                 {analysis.opportunities?.length > 0 && (
                   <div>
-                    <p className="text-[11px] text-muted mb-2 uppercase tracking-wide flex items-center gap-1.5">
-                      <IconCheck size={12} className="text-emerald-400" /> Opportunities
+                    <p className="text-[10px] text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <IconCheck size={11} className="text-emerald-400" /> Opportunities
                     </p>
-                    <ul className="space-y-1.5">
+                    <ul className="space-y-2">
                       {analysis.opportunities.map((o, i) => (
-                        <li key={i} className="text-[12px] text-muted flex items-start gap-2">
-                          <span className="text-emerald-400 mt-0.5">✓</span>{o}
+                        <li key={i} className="flex items-start gap-2.5 text-[12px] text-muted bg-emerald-500/5 border border-emerald-500/15 rounded-lg px-3 py-2 leading-relaxed">
+                          <span className="text-emerald-400 shrink-0 mt-0.5">✓</span>{o}
                         </li>
                       ))}
                     </ul>
@@ -619,8 +888,8 @@ function LeadDrawer({
                 )}
 
                 {analysis.competitorGap && (
-                  <div className="bg-surface rounded-lg p-3">
-                    <p className="text-[11px] text-muted mb-1 uppercase tracking-wide">Competitor Gap</p>
+                  <div className="rounded-xl bg-surface border border-border p-4">
+                    <p className="text-[10px] text-muted uppercase tracking-wider mb-1.5">Competitor Gap</p>
                     <p className="text-[12px] text-muted leading-relaxed">{analysis.competitorGap}</p>
                   </div>
                 )}
@@ -637,17 +906,20 @@ function LeadDrawer({
           </div>
         )}
 
+        {/* ── Pitch Tab ── */}
         {activeTab === "pitch" && (
           <div className="space-y-4">
             {!lead.pitchDraft ? (
-              <div className="text-center py-10">
-                <IconBot size={36} className="text-muted mx-auto mb-3 opacity-40" />
-                <p className="text-[13px] text-muted mb-2">No pitch drafted yet</p>
-                <p className="text-[12px] text-muted opacity-70 mb-4">
-                  {!analysis ? "Run an analysis first for a stronger pitch, or draft now" : "Ready to draft based on the analysis"}
-                </p>
+              <div className="text-center py-12">
+                <div className="w-16 h-16 rounded-2xl bg-surface border border-border flex items-center justify-center mx-auto mb-4">
+                  <IconBot size={28} className="text-muted opacity-40" />
+                </div>
+                <p className="text-[14px] font-semibold text-foreground mb-1">No pitch yet</p>
+                <p className="text-[12px] text-muted mb-5">AI will write a personalized cold outreach email</p>
                 <button onClick={onDraftPitch} disabled={pitching} className="btn-primary flex items-center gap-2 mx-auto">
-                  {pitching ? <><IconRefresh size={14} className="animate-spin" /> Writing…</> : <><IconBot size={14} /> Draft Pitch with AI</>}
+                  {pitching
+                    ? <><IconRefresh size={14} className="animate-spin" /> Writing…</>
+                    : <><IconBot size={14} /> Draft Pitch with AI</>}
                 </button>
               </div>
             ) : (
@@ -655,7 +927,7 @@ function LeadDrawer({
                 {lead.pitchSentAt && <PitchEmailStatus leadId={lead.id} sentAt={lead.pitchSentAt} />}
 
                 <div>
-                  <label className="block text-[11px] text-muted uppercase tracking-wide mb-2">
+                  <label className="block text-[11px] text-muted uppercase tracking-wider mb-2">
                     Pitch Email (editable)
                   </label>
                   <textarea
@@ -666,8 +938,8 @@ function LeadDrawer({
                   />
                 </div>
 
-                <details className="border border-border rounded-lg overflow-hidden">
-                  <summary className="px-4 py-2.5 text-[12px] text-muted cursor-pointer hover:text-foreground transition">
+                <details className="border border-border rounded-xl overflow-hidden">
+                  <summary className="px-4 py-3 text-[12px] text-muted cursor-pointer hover:text-foreground transition bg-surface/50">
                     Preview rendered email
                   </summary>
                   <div
@@ -683,14 +955,12 @@ function LeadDrawer({
                       disabled={sending}
                       className="btn-primary flex-1 flex items-center justify-center gap-2 text-[13px]"
                     >
-                      {sending ? <><IconRefresh size={14} className="animate-spin" /> Sending…</> : <><IconSend size={14} /> Send Pitch</>}
+                      {sending
+                        ? <><IconRefresh size={14} className="animate-spin" /> Sending…</>
+                        : <><IconSend size={14} /> Send Pitch</>}
                     </button>
                   )}
-                  <button
-                    onClick={onDraftPitch}
-                    disabled={pitching}
-                    className="btn-ghost flex items-center gap-1.5 text-[12px]"
-                  >
+                  <button onClick={onDraftPitch} disabled={pitching} className="btn-ghost flex items-center gap-1.5 text-[12px]">
                     {pitching ? <IconRefresh size={13} className="animate-spin" /> : <IconRefresh size={13} />}
                     Re-draft
                   </button>
@@ -715,7 +985,7 @@ function LeadFormModal({
 }) {
   return (
     <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4">
-      <div className="panel w-full max-w-lg max-h-[90vh] overflow-y-auto fade-in">
+      <div className="panel w-full max-w-lg max-h-[90vh] overflow-y-auto fade-in rounded-2xl">
         <div className="panel-header">
           <h3 className="text-[15px] font-semibold">{lead ? "Edit Lead" : "Add Lead"}</h3>
           <button onClick={onClose} className="text-muted hover:text-foreground transition cursor-pointer">
@@ -755,7 +1025,7 @@ function LeadFormModal({
           </div>
           <div>
             <label className="block text-[12px] font-medium text-muted mb-1.5">LinkedIn URL</label>
-            <input name="linkedinUrl" type="url" placeholder="https://linkedin.com/in/..." defaultValue={lead?.linkedinUrl || ""} className="input-field" />
+            <input name="linkedinUrl" type="url" placeholder="https://linkedin.com/in/…" defaultValue={lead?.linkedinUrl || ""} className="input-field" />
           </div>
           <div>
             <label className="block text-[12px] font-medium text-muted mb-1.5">Notes</label>
@@ -772,6 +1042,17 @@ function LeadFormModal({
 }
 
 // ─── CSV Import Modal ─────────────────────────────────────────────────────────
+
+interface MappedLead {
+  name: string;
+  email: string;
+  phone: string;
+  business: string;
+  websiteUrl: string;
+  industry: string;
+  linkedinUrl: string;
+  notes: string;
+}
 
 function ImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
   const [step, setStep] = useState<"upload" | "parsing" | "preview" | "done">("upload");
@@ -792,11 +1073,7 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
     fd.append("file", file);
     const res = await fetch("/api/leads/import", { method: "POST", body: fd });
     const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || "Failed to parse CSV");
-      setStep("upload");
-      return;
-    }
+    if (!res.ok) { setError(data.error || "Failed to parse CSV"); setStep("upload"); return; }
     const leads: MappedLead[] = data.preview ?? [];
     setPreview(leads);
     setSelected(new Set(leads.map((_, i) => i)));
@@ -821,52 +1098,53 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
   }
 
   function handleFile(f: File) {
-    if (f.name.endsWith(".csv") || f.type === "text/csv") {
-      setFile(f);
-      setError("");
-    } else {
-      setError("File must be a .csv");
-    }
+    if (f.name.endsWith(".csv") || f.type === "text/csv") { setFile(f); setError(""); }
+    else setError("File must be a .csv");
   }
 
   return (
     <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4">
-      <div className="panel w-full max-w-2xl max-h-[90vh] overflow-y-auto fade-in">
+      <div className="panel w-full max-w-2xl max-h-[90vh] overflow-y-auto fade-in rounded-2xl">
         <div className="panel-header">
           <h3 className="text-[15px] font-semibold flex items-center gap-2"><IconUpload size={16} /> Import CSV</h3>
-          <button onClick={onClose} className="text-muted hover:text-foreground transition cursor-pointer"><IconX size={18} /></button>
+          <button onClick={onClose} className="text-muted hover:text-foreground transition"><IconX size={18} /></button>
         </div>
         <div className="panel-body space-y-4">
 
-          {/* ── Step: done ── */}
           {step === "done" && (
-            <div className="text-center py-8 space-y-3">
-              <div className="text-5xl font-black text-emerald-400">{savedCount}</div>
+            <div className="text-center py-10 space-y-3">
+              <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto">
+                <IconCheck size={28} className="text-emerald-400" />
+              </div>
+              <div className="text-4xl font-black text-emerald-400">{savedCount}</div>
               <p className="text-[13px] text-muted">leads added to your pipeline</p>
               <button onClick={onClose} className="btn-primary mx-auto">Done</button>
             </div>
           )}
 
-          {/* ── Step: upload ── */}
           {step === "upload" && (
             <>
               <div
-                className={`border-2 border-dashed rounded-xl p-10 text-center transition cursor-pointer ${dragging ? "border-accent bg-accent/5" : "border-border hover:border-accent/50"}`}
+                className={`border-2 border-dashed rounded-2xl p-10 text-center transition cursor-pointer ${
+                  dragging ? "border-accent bg-accent/5" : "border-border hover:border-accent/50"
+                }`}
                 onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
                 onClick={() => inputRef.current?.click()}
               >
-                <IconUpload size={32} className="mx-auto mb-3 text-muted opacity-40" />
+                <div className="w-14 h-14 bg-surface rounded-2xl border border-border flex items-center justify-center mx-auto mb-4">
+                  <IconUpload size={24} className="text-muted opacity-60" />
+                </div>
                 {file ? (
                   <>
-                    <p className="text-[14px] font-medium text-accent">{file.name}</p>
-                    <p className="text-[11px] text-muted mt-1 opacity-60">{(file.size / 1024).toFixed(1)} KB — click to change</p>
+                    <p className="text-[15px] font-semibold text-accent">{file.name}</p>
+                    <p className="text-[12px] text-muted mt-1">{(file.size / 1024).toFixed(1)} KB · click to change</p>
                   </>
                 ) : (
                   <>
-                    <p className="text-[13px] text-muted">Drop your CSV here or click to browse</p>
-                    <p className="text-[11px] text-muted mt-1.5 opacity-50">Any column layout — AI will map it automatically</p>
+                    <p className="text-[14px] font-medium text-foreground">Drop your CSV here or click to browse</p>
+                    <p className="text-[12px] text-muted mt-1.5">Any column layout — AI will map it automatically</p>
                   </>
                 )}
               </div>
@@ -881,32 +1159,31 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
             </>
           )}
 
-          {/* ── Step: parsing ── */}
           {step === "parsing" && (
-            <div className="text-center py-12 space-y-4">
+            <div className="text-center py-14 space-y-4">
               <IconRefresh size={28} className="mx-auto text-accent animate-spin" />
-              <p className="text-[14px] font-medium">Reading your CSV…</p>
+              <p className="text-[15px] font-semibold">Reading your CSV…</p>
               <p className="text-[12px] text-muted">AI is mapping columns and extracting lead data</p>
             </div>
           )}
 
-          {/* ── Step: preview ── */}
           {step === "preview" && (
             <>
               <div className="flex items-center justify-between">
-                <p className="text-[13px] font-medium">{preview.length} leads found in <span className="text-accent">{file?.name}</span></p>
+                <p className="text-[13px] font-semibold">{preview.length} leads found in <span className="text-accent">{file?.name}</span></p>
                 <div className="flex gap-2">
-                  <button onClick={() => setSelected(new Set(preview.map((_, i) => i)))} className="text-[11px] text-accent hover:underline cursor-pointer">Select all</button>
+                  <button onClick={() => setSelected(new Set(preview.map((_, i) => i)))} className="text-[11px] text-accent hover:underline">Select all</button>
                   <span className="text-muted">·</span>
-                  <button onClick={() => setSelected(new Set())} className="text-[11px] text-muted hover:underline cursor-pointer">Deselect all</button>
+                  <button onClick={() => setSelected(new Set())} className="text-[11px] text-muted hover:underline">Deselect all</button>
                 </div>
               </div>
-
               <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
                 {preview.map((lead, i) => (
                   <label
                     key={i}
-                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${selected.has(i) ? "border-accent/50 bg-accent/5" : "border-border hover:border-border/80"}`}
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition ${
+                      selected.has(i) ? "border-accent/50 bg-accent/5" : "border-border hover:border-border/80"
+                    }`}
                   >
                     <input
                       type="checkbox"
@@ -918,11 +1195,14 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
                       }}
                       className="mt-1 shrink-0"
                     />
+                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${getGradient(lead.business || lead.name)} flex items-center justify-center shrink-0`}>
+                      <span className="text-white font-bold text-[10px]">{initials(lead.name, lead.business)}</span>
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-[13px]">{lead.business || lead.name || "—"}</span>
+                        <span className="font-semibold text-[13px]">{lead.business || lead.name || "—"}</span>
                         {lead.name && lead.business && <span className="text-[11px] text-muted">{lead.name}</span>}
-                        {lead.industry && <span className="text-[11px] text-muted bg-surface px-1.5 py-0.5 rounded">{lead.industry}</span>}
+                        {lead.industry && <span className="text-[11px] text-muted bg-surface px-1.5 py-0.5 rounded-md border border-border">{lead.industry}</span>}
                       </div>
                       <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         {lead.email && <span className="text-[11px] text-muted">{lead.email}</span>}
@@ -936,15 +1216,12 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
                           </a>
                         )}
                       </div>
-                      {lead.notes && <p className="text-[11px] text-muted mt-0.5 leading-relaxed line-clamp-1">{lead.notes}</p>}
                     </div>
                   </label>
                 ))}
               </div>
-
               {error && <p className="text-[12px] text-danger flex items-center gap-1.5"><IconAlert size={13} /> {error}</p>}
-
-              <div className="flex gap-3 border-t border-border pt-3">
+              <div className="flex gap-3 border-t border-border pt-4">
                 <button
                   onClick={handleImport}
                   disabled={saving || selected.size === 0}
@@ -958,7 +1235,6 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
               </div>
             </>
           )}
-
         </div>
       </div>
     </div>
@@ -966,17 +1242,6 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
 }
 
 // ─── Find Leads Modal ─────────────────────────────────────────────────────────
-
-interface MappedLead {
-  name: string;
-  email: string;
-  phone: string;
-  business: string;
-  websiteUrl: string;
-  industry: string;
-  linkedinUrl: string;
-  notes: string;
-}
 
 interface FoundLead {
   name: string;
@@ -1039,16 +1304,21 @@ function FindLeadsModal({ onClose, onImported }: { onClose: () => void; onImport
 
   return (
     <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4">
-      <div className="panel w-full max-w-2xl max-h-[90vh] overflow-y-auto fade-in">
+      <div className="panel w-full max-w-2xl max-h-[90vh] overflow-y-auto fade-in rounded-2xl">
         <div className="panel-header">
-          <h3 className="text-[15px] font-semibold flex items-center gap-2"><IconSparkles size={16} /> Find New Leads with AI</h3>
-          <button onClick={onClose} className="text-muted hover:text-foreground transition cursor-pointer"><IconX size={18} /></button>
+          <h3 className="text-[15px] font-semibold flex items-center gap-2">
+            <IconSparkles size={16} /> Find New Leads with AI
+          </h3>
+          <button onClick={onClose} className="text-muted hover:text-foreground transition"><IconX size={18} /></button>
         </div>
         <div className="panel-body space-y-4">
           {done ? (
-            <div className="text-center py-8">
+            <div className="text-center py-10 space-y-3">
+              <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto">
+                <IconCheck size={28} className="text-emerald-400" />
+              </div>
               <div className="text-4xl font-black text-emerald-400">{savedCount}</div>
-              <p className="text-[13px] text-muted mt-2">leads saved to your pipeline</p>
+              <p className="text-[13px] text-muted">leads saved to your pipeline</p>
               <button onClick={onClose} className="btn-primary mx-auto mt-4">Done</button>
             </div>
           ) : (
@@ -1059,7 +1329,7 @@ function FindLeadsModal({ onClose, onImported }: { onClose: () => void; onImport
                     <IconBuilding size={12} /> Industry / Business Type
                   </label>
                   <input
-                    placeholder="e.g. restaurants, plumbers, real estate..."
+                    placeholder="e.g. restaurants, plumbers, real estate…"
                     value={form.industry}
                     onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
                     className="input-field"
@@ -1078,7 +1348,7 @@ function FindLeadsModal({ onClose, onImported }: { onClose: () => void; onImport
                 <div>
                   <label className="block text-[12px] font-medium text-muted mb-1.5">Keywords / Signals</label>
                   <input
-                    placeholder="e.g. no website, bad reviews, new business..."
+                    placeholder="e.g. no website, bad reviews, new business…"
                     value={form.keywords}
                     onChange={(e) => setForm((f) => ({ ...f, keywords: e.target.value }))}
                     className="input-field"
@@ -1086,40 +1356,42 @@ function FindLeadsModal({ onClose, onImported }: { onClose: () => void; onImport
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-muted mb-1.5">Number of leads</label>
-                  <select value={form.count} onChange={(e) => setForm((f) => ({ ...f, count: e.target.value }))} className="input-field">
+                  <select
+                    value={form.count}
+                    onChange={(e) => setForm((f) => ({ ...f, count: e.target.value }))}
+                    className="input-field"
+                  >
                     {["5", "10", "15", "20"].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </div>
               </div>
-
               {error && <p className="text-[12px] text-danger flex items-center gap-1.5"><IconAlert size={13} /> {error}</p>}
-
               <button
                 onClick={handleSearch}
                 disabled={searching || (!form.industry && !form.keywords)}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 {searching
-                  ? <><IconRefresh size={14} className="animate-spin" /> Searching the web with Gemini AI…</>
+                  ? <><IconRefresh size={14} className="animate-spin" /> Searching with AI…</>
                   : <><IconSparkles size={14} /> Find Leads</>}
               </button>
-
               {results.length > 0 && (
                 <div className="space-y-3 border-t border-border pt-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-[13px] font-medium">{results.length} leads found</p>
+                    <p className="text-[13px] font-semibold">{results.length} leads found</p>
                     <div className="flex gap-2">
-                      <button onClick={() => setSelected(new Set(results.map((_, i) => i)))} className="text-[11px] text-accent hover:underline cursor-pointer">Select all</button>
+                      <button onClick={() => setSelected(new Set(results.map((_, i) => i)))} className="text-[11px] text-accent hover:underline">Select all</button>
                       <span className="text-muted">·</span>
-                      <button onClick={() => setSelected(new Set())} className="text-[11px] text-muted hover:underline cursor-pointer">Deselect all</button>
+                      <button onClick={() => setSelected(new Set())} className="text-[11px] text-muted hover:underline">Deselect all</button>
                     </div>
                   </div>
-
                   <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     {results.map((lead, i) => (
                       <label
                         key={i}
-                        className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${selected.has(i) ? "border-accent/50 bg-accent/5" : "border-border hover:border-border/80"}`}
+                        className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition ${
+                          selected.has(i) ? "border-accent/50 bg-accent/5" : "border-border hover:border-border/80"
+                        }`}
                       >
                         <input
                           type="checkbox"
@@ -1131,10 +1403,13 @@ function FindLeadsModal({ onClose, onImported }: { onClose: () => void; onImport
                           }}
                           className="mt-1 shrink-0"
                         />
+                        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${getGradient(lead.business || lead.name)} flex items-center justify-center shrink-0`}>
+                          <span className="text-white font-bold text-[10px]">{initials(lead.name, lead.business)}</span>
+                        </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-[13px]">{lead.business || lead.name}</span>
-                            {lead.industry && <span className="text-[11px] text-muted bg-surface px-1.5 py-0.5 rounded">{lead.industry}</span>}
+                            <span className="font-semibold text-[13px]">{lead.business || lead.name}</span>
+                            {lead.industry && <span className="text-[11px] text-muted bg-surface px-1.5 py-0.5 rounded-md border border-border">{lead.industry}</span>}
                           </div>
                           {lead.email && <div className="text-[11px] text-muted mt-0.5">{lead.email}</div>}
                           {lead.websiteUrl && (
@@ -1143,12 +1418,11 @@ function FindLeadsModal({ onClose, onImported }: { onClose: () => void; onImport
                               {lead.websiteUrl}
                             </a>
                           )}
-                          {lead.notes && <p className="text-[11px] text-muted mt-1 leading-relaxed">{lead.notes}</p>}
+                          {lead.notes && <p className="text-[11px] text-muted mt-1 leading-relaxed line-clamp-2">{lead.notes}</p>}
                         </div>
                       </label>
                     ))}
                   </div>
-
                   <button
                     onClick={handleSaveSelected}
                     disabled={saving || selected.size === 0}
@@ -1178,14 +1452,16 @@ function InfoRow({ icon, label, value, isLink }: {
 }) {
   if (!value) return null;
   return (
-    <div className="flex items-start gap-2.5">
+    <div className="flex items-start gap-3">
       <span className="text-muted mt-0.5 shrink-0">{icon}</span>
       <div>
-        <p className="text-[11px] text-muted">{label}</p>
+        <p className="text-[10px] text-muted uppercase tracking-wider">{label}</p>
         {isLink ? (
-          <a href={value} target="_blank" rel="noopener noreferrer" className="text-[12px] text-accent hover:underline break-all">{value}</a>
+          <a href={value} target="_blank" rel="noopener noreferrer" className="text-[12px] text-accent hover:underline break-all">
+            {value}
+          </a>
         ) : (
-          <p className="text-[12px] text-foreground">{value}</p>
+          <p className="text-[13px] text-foreground">{value}</p>
         )}
       </div>
     </div>
@@ -1202,9 +1478,9 @@ const QUALITY_COLORS: Record<string, string> = {
 
 function AnalysisCard({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="bg-surface rounded-lg p-3">
-      <p className="text-[11px] text-muted mb-1">{label}</p>
-      <p className={`text-[12px] font-semibold capitalize ${QUALITY_COLORS[value] || "text-foreground"}`}>
+    <div className="bg-surface/60 rounded-xl border border-border p-3.5">
+      <p className="text-[10px] text-muted uppercase tracking-wider mb-1.5">{label}</p>
+      <p className={`text-[13px] font-bold capitalize ${QUALITY_COLORS[value?.toLowerCase()] || "text-foreground"}`}>
         {value?.replace(/_/g, " ") || "—"}
       </p>
       {sub && <p className="text-[11px] text-muted mt-1 leading-relaxed">{sub}</p>}
