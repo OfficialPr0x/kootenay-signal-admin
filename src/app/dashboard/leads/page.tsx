@@ -122,6 +122,16 @@ export default function LeadsPage() {
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [pitching, setPitching] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pendingSend, setPendingSend] = useState<{ lead: Lead; pitchHtml?: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ msg, type });
+    toastTimer.current = setTimeout(() => setToast(null), 3500);
+  }, []);
 
   const fetchLeads = useCallback(async () => {
     const params = new URLSearchParams();
@@ -153,7 +163,13 @@ export default function LeadsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this lead?")) return;
+    setPendingDelete(id);
+  }
+
+  async function executeDelete() {
+    if (!pendingDelete) return;
+    const id = pendingDelete;
+    setPendingDelete(null);
     if (selectedLead?.id === id) setSelectedLead(null);
     await fetch(`/api/leads/${id}`, { method: "DELETE" });
     fetchLeads();
@@ -183,8 +199,14 @@ export default function LeadsPage() {
     } finally { setPitching(null); }
   }
 
-  async function handleSendPitch(lead: Lead, pitchHtml?: string) {
-    if (!confirm(`Send pitch to ${lead.email}?`)) return;
+  function handleSendPitch(lead: Lead, pitchHtml?: string) {
+    setPendingSend({ lead, pitchHtml });
+  }
+
+  async function executeSendPitch() {
+    if (!pendingSend) return;
+    const { lead, pitchHtml } = pendingSend;
+    setPendingSend(null);
     setSending(lead.id);
     try {
       const res = await fetch(`/api/leads/${lead.id}/contact`, {
@@ -193,8 +215,8 @@ export default function LeadsPage() {
         body: JSON.stringify(pitchHtml ? { pitchHtml } : {}),
       });
       const data = await res.json();
-      if (res.ok) { await fetchLeads(); alert(`Pitch sent to ${lead.email}!`); }
-      else alert(`Failed: ${data.error}`);
+      if (res.ok) { await fetchLeads(); showToast(`Pitch sent to ${lead.email}!`); }
+      else showToast(data.error ?? "Failed to send pitch", "error");
     } finally { setSending(null); }
   }
 
@@ -375,6 +397,88 @@ export default function LeadsPage() {
 
       {showImport && <ImportModal onClose={() => setShowImport(false)} onImported={fetchLeads} />}
       {showFindLeads && <FindLeadsModal onClose={() => setShowFindLeads(false)} onImported={fetchLeads} />}
+
+      {/* ── Send Confirmation Modal ── */}
+      {pendingSend && (
+        <ConfirmModal
+          title="Send Pitch"
+          message={`Send this pitch email to ${pendingSend.lead.email}?`}
+          confirmLabel="Send Pitch"
+          confirmClass="btn-primary"
+          icon={<IconSend size={16} />}
+          onConfirm={executeSendPitch}
+          onCancel={() => setPendingSend(null)}
+        />
+      )}
+
+      {/* ── Delete Confirmation Modal ── */}
+      {pendingDelete && (
+        <ConfirmModal
+          title="Delete Lead"
+          message="This lead and all associated data will be permanently deleted."
+          confirmLabel="Delete"
+          confirmClass="bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 rounded-xl px-4 py-2 text-[13px] font-medium transition"
+          icon={<IconTrash size={16} />}
+          onConfirm={executeDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl border text-[13px] font-medium shadow-2xl transition-all duration-300 ${
+          toast.type === "success"
+            ? "bg-[#0c0e12] border-emerald-500/30 text-emerald-400"
+            : "bg-[#0c0e12] border-red-500/30 text-red-400"
+        }`}>
+          {toast.type === "success"
+            ? <IconCheck size={14} />
+            : <IconAlert size={14} />}
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Confirm Modal ────────────────────────────────────────────────────────────
+
+function ConfirmModal({
+  title, message, confirmLabel, confirmClass, icon, onConfirm, onCancel,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  confirmClass: string;
+  icon: React.ReactNode;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4">
+      <div className="panel w-full max-w-sm fade-in rounded-2xl overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-accent to-orange-500" />
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
+              {icon}
+            </div>
+            <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
+          </div>
+          <p className="text-[13px] text-muted mb-6">{message}</p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={onCancel}
+              className="btn-ghost text-[13px] px-4 py-2"
+            >
+              Cancel
+            </button>
+            <button onClick={onConfirm} className={confirmClass}>
+              {confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
