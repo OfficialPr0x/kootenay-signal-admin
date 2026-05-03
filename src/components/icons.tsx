@@ -569,3 +569,23 @@ export function IconPhone({ size = 20, className }: IconProps) {
     </svg>
   );
 }
+
+export function IconPipeline({ size = 20, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="2" y="4" width="4" height="16" rx="1" />
+      <rect x="9" y="4" width="4" height="12" rx="1" />
+      <rect x="16" y="4" width="4" height="8" rx="1" />
+      <path d="M2 21h20" />
+    </svg>
+  );
+}
+
+export function IconArrowRight({ size = 20, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </svg>
+  );
+}

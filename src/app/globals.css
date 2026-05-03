@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Utility */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 :root {
   --background: #06080a;
   --foreground: #e8eaed;

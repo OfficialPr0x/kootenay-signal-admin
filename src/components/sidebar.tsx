@@ -12,11 +12,13 @@ import {
   IconSettings,
   IconLogout,
   IconBilling,
+  IconPipeline,
 } from "@/components/icons";
 
 const navItems = [
   { href: "/dashboard",          label: "Dashboard", icon: IconDashboard },
   { href: "/dashboard/leads",    label: "Leads",     icon: IconLeads },
+  { href: "/dashboard/pipeline", label: "Pipeline",  icon: IconPipeline },
   { href: "/dashboard/clients",  label: "Clients",   icon: IconClients },
   { href: "/dashboard/invoices", label: "Invoices",  icon: IconInvoices },
   { href: "/dashboard/billing",  label: "Billing",   icon: IconBilling },
