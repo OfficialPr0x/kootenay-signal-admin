@@ -5,7 +5,6 @@ import {
   View,
   Image,
   StyleSheet,
-  Font,
 } from "@react-pdf/renderer";
 
 const LOGO = "https://res.cloudinary.com/doajstql7/image/upload/q_auto/f_auto/v1777003162/f3d21215-ada9-4ea3-b86d-510a6885c8f5-removebg-preview_uat1ay.png";
@@ -27,8 +26,6 @@ const C = {
   danger:   "#ef4444",
   dangerBg: "#1f0c0c",
 };
-
-Font.register({ family: "Helvetica" });
 
 const styles = StyleSheet.create({
   page: {
