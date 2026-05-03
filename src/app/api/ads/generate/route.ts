@@ -137,16 +137,20 @@ export async function POST(request: NextRequest) {
           // Storage failure is non-fatal
         }
 
-        // Persist history
-        await supabase.from("AdCreative").insert({
-          prompt: userPrompt,
-          revisedPrompt,
-          brandedPrompt: finalPrompt !== userPrompt ? finalPrompt : null,
-          size,
-          quality,
-          imageUrl,
-          brandProfileId: (brandProfile as BrandProfile | null)?.id ?? null,
-        });
+        // Persist history (non-fatal — table may not exist yet)
+        try {
+          await supabase.from("AdCreative").insert({
+            prompt: userPrompt,
+            revisedPrompt,
+            brandedPrompt: finalPrompt !== userPrompt ? finalPrompt : null,
+            size,
+            quality,
+            imageUrl,
+            brandProfileId: (brandProfile as BrandProfile | null)?.id ?? null,
+          });
+        } catch {
+          // DB insert failure is non-fatal
+        }
 
         return { b64_json: b64, revised_prompt: revisedPrompt, imageUrl };
       })
@@ -162,17 +166,14 @@ export async function POST(request: NextRequest) {
 
     if (err && typeof err === "object" && "status" in err) {
       const apiErr = err as { status: number; message?: string };
-      if (apiErr.status === 400) {
-        return NextResponse.json(
-          { error: apiErr.message || "Invalid request to image API" },
-          { status: 400 }
-        );
-      }
+      const msg = apiErr.message || "Image API error";
       if (apiErr.status === 429) {
         return NextResponse.json({ error: "Rate limit exceeded. Please try again shortly." }, { status: 429 });
       }
+      return NextResponse.json({ error: msg }, { status: apiErr.status >= 400 && apiErr.status < 600 ? apiErr.status : 500 });
     }
 
-    return NextResponse.json({ error: "Image generation failed" }, { status: 500 });
+    const fallbackMsg = err instanceof Error ? err.message : "Image generation failed";
+    return NextResponse.json({ error: fallbackMsg }, { status: 500 });
   }
 }
