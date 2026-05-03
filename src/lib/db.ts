@@ -22,15 +22,27 @@ function resolveSupabaseKey(): string {
   throw new Error("No valid Supabase key found. Add SUPABASE_SECRET_KEY=sb_secret_... to your .env");
 }
 
-export const supabase =
-  globalForSupabase.supabase ||
-  createClient(
+function createSupabaseClient(): SupabaseClient {
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     resolveSupabaseKey(),
     { auth: { persistSession: false, autoRefreshToken: false } }
   );
+}
 
-if (process.env.NODE_ENV !== "production") globalForSupabase.supabase = supabase;
+// Lazy proxy — the real client is only instantiated on first property access,
+// so missing env vars during `next build` (page-data collection phase) won't
+// throw at module evaluation time.
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop, receiver) {
+    if (!globalForSupabase.supabase) {
+      const client = createSupabaseClient();
+      if (process.env.NODE_ENV !== "production") globalForSupabase.supabase = client;
+      return Reflect.get(client, prop, client);
+    }
+    return Reflect.get(globalForSupabase.supabase, prop, globalForSupabase.supabase);
+  },
+});
 
 /** Throw on Supabase query errors */
 export function throwIfError<T>(result: { data: T; error: { message: string } | null }): T {
