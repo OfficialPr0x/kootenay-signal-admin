@@ -16,6 +16,7 @@ interface Invoice {
   description: string | null;
   amount: number;
   status: string;
+  paymentSource: string | null;
   dueDate: string;
   paidAt: string | null;
   createdAt: string;
@@ -59,6 +60,18 @@ export default function InvoicesPage() {
   const [paymentLink, setPaymentLink] = useState<{ url: string; invoiceId: string } | null>(null);
   const [linkLoading, setLinkLoading] = useState<string | null>(null);
   const [linkError, setLinkError] = useState("");
+
+  // pdf / email state
+  const [emailLoading, setEmailLoading] = useState<string | null>(null);
+  const [emailResult, setEmailResult] = useState<{ success?: boolean; error?: string; id?: string } | null>(null);
+
+  // collect manual payment state
+  const [collectInvoice, setCollectInvoice] = useState<Invoice | null>(null);
+  const [collectLoading, setCollectLoading] = useState(false);
+  const [collectMethod, setCollectMethod] = useState("cash");
+  const [collectReference, setCollectReference] = useState("");
+  const [collectNotes, setCollectNotes] = useState("");
+  const [collectDate, setCollectDate] = useState(new Date().toISOString().slice(0, 10));
 
   // one-off builder state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -168,6 +181,16 @@ export default function InvoicesPage() {
     }
   }
 
+  async function handleEmailInvoice(inv: Invoice) {
+    setEmailLoading(inv.id);
+    setEmailResult(null);
+    const res = await fetch(`/api/invoices/${inv.id}/email`, { method: "POST" });
+    const data = await res.json();
+    setEmailLoading(null);
+    setEmailResult({ ...data, id: inv.id });
+    setTimeout(() => setEmailResult(null), 5000);
+  }
+
   async function handleManualSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -179,6 +202,34 @@ export default function InvoicesPage() {
       body: JSON.stringify(data),
     });
     setShowForm(null);
+    fetchInvoices();
+  }
+
+  function openCollect(inv: Invoice) {
+    setCollectInvoice(inv);
+    setCollectMethod("cash");
+    setCollectReference("");
+    setCollectNotes("");
+    setCollectDate(new Date().toISOString().slice(0, 10));
+  }
+
+  async function handleCollectSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!collectInvoice) return;
+    setCollectLoading(true);
+    await fetch(`/api/invoices/${collectInvoice.id}/payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: collectInvoice.amount,
+        method: collectMethod,
+        reference: collectReference || undefined,
+        notes: collectNotes || undefined,
+        paidAt: new Date(collectDate).toISOString(),
+      }),
+    });
+    setCollectLoading(false);
+    setCollectInvoice(null);
     fetchInvoices();
   }
 
@@ -453,6 +504,79 @@ export default function InvoicesPage() {
         </div>
       )}
 
+      {/* ── Collect Manual Payment ── */}
+      {collectInvoice && (
+        <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4">
+          <div className="panel w-full max-w-md fade-in">
+            <div className="panel-header">
+              <div>
+                <h3 className="text-[15px] font-semibold">Record Payment</h3>
+                <p className="text-[11px] text-muted mt-0.5">{collectInvoice.client.name} · ${collectInvoice.amount.toLocaleString()}</p>
+              </div>
+              <button onClick={() => setCollectInvoice(null)} className="text-muted hover:text-foreground transition cursor-pointer">
+                <IconX size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCollectSubmit} className="panel-body space-y-4">
+              <div>
+                <label className="block text-[12px] font-medium text-muted mb-1.5">Payment Method *</label>
+                <select
+                  value={collectMethod}
+                  onChange={(e) => setCollectMethod(e.target.value)}
+                  className="input-field cursor-pointer"
+                >
+                  <option value="cash">Cash</option>
+                  <option value="e_transfer">E-Transfer</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="bank">Bank Transfer / EFT</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-muted mb-1.5">Reference # <span className="text-muted/50">(optional)</span></label>
+                <input
+                  type="text"
+                  value={collectReference}
+                  onChange={(e) => setCollectReference(e.target.value)}
+                  placeholder="Cheque #, e-transfer confirmation, etc."
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-muted mb-1.5">Date Received *</label>
+                <input
+                  type="date"
+                  value={collectDate}
+                  onChange={(e) => setCollectDate(e.target.value)}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-muted mb-1.5">Notes <span className="text-muted/50">(optional)</span></label>
+                <input
+                  type="text"
+                  value={collectNotes}
+                  onChange={(e) => setCollectNotes(e.target.value)}
+                  placeholder="Any additional notes"
+                  className="input-field"
+                />
+              </div>
+              <div className="rounded-lg bg-success/8 border border-success/20 px-4 py-3 flex items-center justify-between">
+                <span className="text-[12px] text-muted">Amount collected</span>
+                <span className="text-[18px] font-bold font-mono text-success">${collectInvoice.amount.toLocaleString()}</span>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button type="submit" disabled={collectLoading} className="btn-primary disabled:opacity-40">
+                  {collectLoading ? "Saving…" : "Record Payment"}
+                </button>
+                <button type="button" onClick={() => setCollectInvoice(null)} className="btn-ghost">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="panel">
         {loading ? (
           <p className="px-5 py-12 text-center text-muted text-[13px]">Loading...</p>
@@ -485,15 +609,22 @@ export default function InvoicesPage() {
                     </td>
                     <td className="font-mono font-medium text-foreground">${inv.amount.toLocaleString()}</td>
                     <td>
-                      <select
-                        value={inv.status}
-                        onChange={(e) => handleStatusChange(inv.id, e.target.value)}
-                        className="bg-background border border-border rounded-md px-2 py-1.5 text-[12px] cursor-pointer focus:outline-none focus:border-accent text-muted-foreground"
-                      >
-                        <option value="pending">pending</option>
-                        <option value="paid">paid</option>
-                        <option value="overdue">overdue</option>
-                      </select>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <select
+                          value={inv.status}
+                          onChange={(e) => handleStatusChange(inv.id, e.target.value)}
+                          className="bg-background border border-border rounded-md px-2 py-1.5 text-[12px] cursor-pointer focus:outline-none focus:border-accent text-muted-foreground"
+                        >
+                          <option value="pending">pending</option>
+                          <option value="paid">paid</option>
+                          <option value="overdue">overdue</option>
+                        </select>
+                        {inv.status === "paid" && inv.paymentSource && (
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${inv.paymentSource === "stripe" ? "bg-info/10 text-info" : "bg-success/10 text-success"}`}>
+                            {inv.paymentSource === "stripe" ? "Stripe" : "Manual"}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="text-muted text-[12px]">
                       {new Date(inv.dueDate).toLocaleDateString()}
@@ -510,6 +641,44 @@ export default function InvoicesPage() {
                             {linkLoading === inv.id ? "…" : "Pay Link"}
                           </button>
                         )}
+                        {inv.status !== "paid" && (
+                          <button
+                            onClick={() => openCollect(inv)}
+                            title="Record manual payment (cash, e-transfer, cheque…)"
+                            className="px-2 py-1 text-[11px] rounded-md border border-success/40 text-success hover:bg-success/10 transition cursor-pointer shrink-0"
+                          >
+                            Collect
+                          </button>
+                        )}
+                        <a
+                          href={`/api/invoices/${inv.id}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Download PDF"
+                          className="px-2 py-1 text-[11px] rounded-md border border-border text-muted hover:text-foreground hover:border-border-bright transition shrink-0"
+                        >
+                          PDF
+                        </a>
+                        <button
+                          onClick={() => handleEmailInvoice(inv)}
+                          disabled={emailLoading === inv.id}
+                          title="Email invoice to client"
+                          className={`px-2 py-1 text-[11px] rounded-md border transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0 ${
+                            emailResult?.id === inv.id && emailResult.success
+                              ? "border-success/40 text-success"
+                              : emailResult?.id === inv.id && emailResult.error
+                              ? "border-danger/40 text-danger"
+                              : "border-border text-muted hover:text-foreground hover:border-border-bright"
+                          }`}
+                        >
+                          {emailLoading === inv.id
+                            ? "…"
+                            : emailResult?.id === inv.id && emailResult.success
+                            ? "Sent ✓"
+                            : emailResult?.id === inv.id && emailResult.error
+                            ? "Failed"
+                            : "Email"}
+                        </button>
                         <button onClick={() => handleDelete(inv.id)}
                           className="p-1.5 rounded-md text-muted hover:text-danger hover:bg-danger-dim transition cursor-pointer"
                           title="Delete">

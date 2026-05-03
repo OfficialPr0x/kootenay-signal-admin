@@ -20,6 +20,7 @@ interface Client {
   business: string;
   website: string | null;
   plan: string;
+  clientType: string;
   status: string;
   monthlyRate: number;
   startDate: string;
@@ -28,16 +29,25 @@ interface Client {
   invoices: Invoice[];
 }
 
-const PLAN_OPTIONS = ["SignalCore", "SearchVault", "SmartNav", "SearchSync"];
+interface Service {
+  id: string;
+  name: string;
+  price: number;
+  isOneOff: boolean;
+}
+
 const STATUS_OPTIONS = ["active", "paused", "churned"];
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [selectedRate, setSelectedRate] = useState<number | "">("");
+  const [formType, setFormType] = useState<"monthly" | "one_off">("monthly");
 
   const fetchClients = useCallback(async () => {
     const params = new URLSearchParams();
@@ -53,6 +63,32 @@ export default function ClientsPage() {
   useEffect(() => {
     fetchClients();
   }, [fetchClients]);
+
+  useEffect(() => {
+    fetch("/api/services")
+      .then((r) => r.json())
+      .then((d) => setServices(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, []);
+
+  function handleServiceSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    const svc = services.find((s) => s.name === e.target.value);
+    setSelectedRate(svc ? svc.price : "");
+  }
+
+  function openForm(client: Client | null) {
+    setEditingClient(client);
+    setSelectedRate("");
+    setFormType((client?.clientType as "monthly" | "one_off") ?? "monthly");
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingClient(null);
+    setSelectedRate("");
+    setFormType("monthly");
+  }
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this client and all their invoices?")) return;
@@ -80,8 +116,7 @@ export default function ClientsPage() {
       });
     }
 
-    setShowForm(false);
-    setEditingClient(null);
+    closeForm();
     fetchClients();
   }
 
@@ -98,7 +133,7 @@ export default function ClientsPage() {
             {clients.filter((c) => c.status === "active").length} active · ${totalMRR.toLocaleString()}/mo MRR
           </p>
         </div>
-        <button onClick={() => { setEditingClient(null); setShowForm(true); }} className="btn-primary">
+        <button onClick={() => openForm(null)} className="btn-primary">
           <IconPlus size={16} />
           Add Client
         </button>
@@ -135,11 +170,40 @@ export default function ClientsPage() {
               <h3 className="text-[15px] font-semibold">
                 {editingClient ? "Edit Client" : "Add New Client"}
               </h3>
-              <button onClick={() => { setShowForm(false); setEditingClient(null); }} className="text-muted hover:text-foreground transition cursor-pointer">
+              <button onClick={closeForm} className="text-muted hover:text-foreground transition cursor-pointer">
                 <IconX size={18} />
               </button>
             </div>
             <form onSubmit={handleSubmit} className="panel-body space-y-4">
+              {/* Client type toggle */}
+              <div>
+                <label className="block text-[12px] font-medium text-muted mb-2">Client Type</label>
+                <div className="flex rounded-lg border border-border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => { setFormType("monthly"); setSelectedRate(""); }}
+                    className={`flex-1 py-2 text-[13px] font-medium transition cursor-pointer ${
+                      formType === "monthly"
+                        ? "bg-accent text-white"
+                        : "bg-transparent text-muted hover:text-foreground"
+                    }`}
+                  >
+                    Monthly Retainer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setFormType("one_off"); setSelectedRate(""); }}
+                    className={`flex-1 py-2 text-[13px] font-medium transition cursor-pointer ${
+                      formType === "one_off"
+                        ? "bg-accent text-white"
+                        : "bg-transparent text-muted hover:text-foreground"
+                    }`}
+                  >
+                    One-Off Project
+                  </button>
+                </div>
+                <input type="hidden" name="clientType" value={formType} />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[12px] font-medium text-muted mb-1.5">Name *</label>
@@ -166,18 +230,37 @@ export default function ClientsPage() {
                   <input name="website" defaultValue={editingClient?.website || ""} className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-[12px] font-medium text-muted mb-1.5">Plan</label>
-                  <select name="plan" defaultValue={editingClient?.plan || "SignalCore"} className="input-field cursor-pointer">
-                    {PLAN_OPTIONS.map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
+                  <label className="block text-[12px] font-medium text-muted mb-1.5">Plan / Service</label>
+                  <select
+                    name="plan"
+                    defaultValue={editingClient?.plan || ""}
+                    onChange={handleServiceSelect}
+                    className="input-field cursor-pointer"
+                    required
+                  >
+                    <option value="" disabled>Select a service…</option>
+                    {formType === "monthly"
+                      ? services.filter((s) => !s.isOneOff).map((s) => (
+                          <option key={s.id} value={s.name}>{s.name} — ${s.price.toLocaleString()}/mo</option>
+                        ))
+                      : services.filter((s) => s.isOneOff).map((s) => (
+                          <option key={s.id} value={s.name}>{s.name} — ${s.price.toLocaleString()}</option>
+                        ))
+                    }
                   </select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[12px] font-medium text-muted mb-1.5">Monthly Rate ($)</label>
-                  <input name="monthlyRate" type="number" step="0.01" defaultValue={editingClient?.monthlyRate || 0} className="input-field" />
+                  <label className="block text-[12px] font-medium text-muted mb-1.5">{formType === "one_off" ? "Project Amount ($)" : "Monthly Rate ($)"}</label>
+                  <input
+                    name="monthlyRate"
+                    type="number"
+                    step="0.01"
+                    value={selectedRate !== "" ? selectedRate : (editingClient?.monthlyRate ?? "")}
+                    onChange={(e) => setSelectedRate(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                    className="input-field"
+                  />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-muted mb-1.5">Status</label>
@@ -196,7 +279,7 @@ export default function ClientsPage() {
                 <button type="submit" className="btn-primary">
                   {editingClient ? "Update" : "Create"} Client
                 </button>
-                <button type="button" onClick={() => { setShowForm(false); setEditingClient(null); }} className="btn-ghost">
+                <button type="button" onClick={closeForm} className="btn-ghost">
                   Cancel
                 </button>
               </div>
@@ -238,11 +321,15 @@ export default function ClientsPage() {
                 </div>
                 <div className="flex items-center justify-between pt-3 border-t border-border">
                   <div>
-                    <span className="text-[11px] text-muted uppercase tracking-wider">Plan</span>
-                    <p className="text-[13px] font-medium text-accent">{client.plan} · ${client.monthlyRate}/mo</p>
+                    <span className="text-[11px] text-muted uppercase tracking-wider">
+                      {client.clientType === "one_off" ? "One-Off" : "Retainer"}
+                    </span>
+                    <p className="text-[13px] font-medium text-accent">
+                      {client.plan} · ${client.monthlyRate.toLocaleString()}{client.clientType !== "one_off" ? "/mo" : ""}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => { setEditingClient(client); setShowForm(true); }}
+                    <button onClick={() => openForm(client)}
                       className="p-1.5 rounded-md text-muted hover:text-accent hover:bg-accent-dim transition cursor-pointer"
                       title="Edit">
                       <IconEdit size={14} />

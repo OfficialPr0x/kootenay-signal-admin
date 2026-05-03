@@ -37,6 +37,7 @@ type AgentRun = {
 };
 
 type RunState = "idle" | "loading" | "needs_approval" | "running" | "completed" | "failed" | "error";
+type VoiceState = "off" | "listening" | "processing" | "unsupported";
 
 // ── Example commands ──
 
@@ -62,7 +63,9 @@ export function CommandPalette() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [history, setHistory] = useState<AgentRun[]>([]);
+  const [voiceState, setVoiceState] = useState<VoiceState>("off");
   const inputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   // ── Keyboard shortcut ──
   useEffect(() => {
@@ -172,6 +175,69 @@ export function CommandPalette() {
     setErrorMsg("");
   }, []);
 
+  // ── Voice input ──
+  const voiceJustFinished = useRef(false);
+
+  const toggleVoice = useCallback(() => {
+    const SpeechRecognitionAPI =
+      typeof window !== "undefined"
+        ? (window.SpeechRecognition ?? (window as unknown as Record<string, unknown>).webkitSpeechRecognition as typeof SpeechRecognition | undefined)
+        : undefined;
+
+    if (!SpeechRecognitionAPI) {
+      setVoiceState("unsupported");
+      return;
+    }
+
+    if (voiceState === "listening") {
+      recognitionRef.current?.stop();
+      setVoiceState("off");
+      return;
+    }
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => setVoiceState("listening");
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = Array.from(event.results)
+        .map(r => r[0].transcript)
+        .join("");
+      setCommand(transcript);
+      if (event.results[event.results.length - 1].isFinal) {
+        setVoiceState("processing");
+        voiceJustFinished.current = true;
+      }
+    };
+
+    recognition.onend = () => {
+      setVoiceState("off");
+      recognitionRef.current = null;
+    };
+
+    recognition.onerror = () => {
+      voiceJustFinished.current = false;
+      setVoiceState("off");
+      recognitionRef.current = null;
+    };
+
+    recognition.start();
+  }, [voiceState]);
+
+  // ── Auto-submit after voice finishes ──
+  useEffect(() => {
+    if (voiceState === "off" && voiceJustFinished.current && command.trim() && state === "idle") {
+      voiceJustFinished.current = false;
+      const t = setTimeout(() => submitCommand(), 300);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceState, command, state]);
+
   if (!open) return null;
 
   return (
@@ -195,7 +261,7 @@ export function CommandPalette() {
         </div>
 
         {/* Input */}
-        <div className="px-4 py-3">
+        <div className="px-4 py-3 flex items-center gap-2">
           <input
             ref={inputRef}
             type="text"
@@ -207,10 +273,25 @@ export function CommandPalette() {
                 submitCommand();
               }
             }}
-            placeholder="What would you like to do?"
+            placeholder={voiceState === "listening" ? "Listening..." : voiceState === "processing" ? "Heard you, submitting..." : "What would you like to do?"}
             disabled={state !== "idle" && state !== "completed" && state !== "failed" && state !== "error"}
-            className="w-full bg-transparent text-[var(--foreground)] text-base placeholder:text-[var(--muted)] outline-none disabled:opacity-50"
+            className="flex-1 bg-transparent text-[var(--foreground)] text-base placeholder:text-[var(--muted)] outline-none disabled:opacity-50"
           />
+          <button
+            type="button"
+            onClick={toggleVoice}
+            title={voiceState === "unsupported" ? "Voice not supported in this browser" : voiceState === "listening" ? "Stop listening" : "Voice command"}
+            disabled={voiceState === "unsupported" || (state !== "idle" && state !== "completed" && state !== "failed" && state !== "error")}
+            className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-lg transition-colors disabled:opacity-40 ${
+              voiceState === "listening"
+                ? "bg-[var(--danger)]/20 text-[var(--danger)] animate-pulse"
+                : voiceState === "processing"
+                ? "bg-[var(--accent)]/20 text-[var(--accent)]"
+                : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-hover)]"
+            }`}
+          >
+            <MicIcon active={voiceState === "listening"} />
+          </button>
         </div>
 
         {/* State-specific content */}
@@ -297,7 +378,7 @@ export function CommandPalette() {
         {/* Footer */}
         <div className="flex items-center justify-between px-4 py-2 border-t border-[var(--border)] text-xs text-[var(--muted)]">
           <span>
-            {state === "idle" ? "Enter to run" : state === "needs_approval" ? "Waiting for approval" : state === "loading" ? "Running..." : ""}
+            {state === "idle" ? "Enter to run · mic to speak" : state === "needs_approval" ? "Waiting for approval" : state === "loading" ? "Running..." : voiceState === "listening" ? "Listening... speak your command" : ""}
           </span>
           <span>ESC to close</span>
         </div>
@@ -508,4 +589,15 @@ function formatJson(json: string): string {
   } catch {
     return json;
   }
+}
+
+function MicIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3" fill={active ? "currentColor" : "none"} />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <line x1="12" y1="17" x2="12" y2="22" />
+      <line x1="8" y1="22" x2="16" y2="22" />
+    </svg>
+  );
 }

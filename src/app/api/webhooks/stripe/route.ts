@@ -36,10 +36,25 @@ export async function POST(request: NextRequest) {
 
         // Auto-mark the corresponding invoice as paid when checkout completes
         if (invoiceId) {
-          await supabase
-            .from("Invoice")
-            .update({ status: "paid", paidAt: new Date().toISOString() })
-            .eq("id", invoiceId);
+          const paidAtDate = new Date().toISOString();
+          const paidAmount = session.amount_total ? session.amount_total / 100 : null;
+
+          await Promise.all([
+            supabase
+              .from("Invoice")
+              .update({ status: "paid", paidAt: paidAtDate, paymentSource: "stripe" })
+              .eq("id", invoiceId),
+            // Log a Payment record for unified payment history
+            paidAmount
+              ? supabase.from("Payment").insert({
+                  invoiceId,
+                  amount: paidAmount,
+                  method: "stripe",
+                  reference: session.id,
+                  paidAt: paidAtDate,
+                })
+              : Promise.resolve(),
+          ]);
         }
         break;
       }

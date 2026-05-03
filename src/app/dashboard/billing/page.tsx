@@ -2,9 +2,23 @@
 
 import { useState, useEffect } from "react";
 
+const CURRENCIES = [
+  { code: "CAD", label: "CAD — Canadian Dollar", symbol: "C$" },
+  { code: "USD", label: "USD — US Dollar", symbol: "$" },
+  { code: "EUR", label: "EUR — Euro", symbol: "€" },
+  { code: "GBP", label: "GBP — British Pound", symbol: "£" },
+  { code: "AUD", label: "AUD — Australian Dollar", symbol: "A$" },
+  { code: "NZD", label: "NZD — New Zealand Dollar", symbol: "NZ$" },
+  { code: "CHF", label: "CHF — Swiss Franc", symbol: "Fr" },
+  { code: "JPY", label: "JPY — Japanese Yen", symbol: "¥" },
+  { code: "MXN", label: "MXN — Mexican Peso", symbol: "MX$" },
+];
+
 interface RecentCharge {
   id: string;
   amount: number;
+  nativeAmount: number;
+  nativeCurrency: string;
   currency: string;
   status: string;
   description: string | null;
@@ -21,7 +35,9 @@ interface StripeRevenue {
   revenue90d: number;
   mrr: number;
   available: number;
+  accountCurrency: string;
   currency: string;
+  exchangeRate: number;
   subscriptionCount: number;
   recentCharges: RecentCharge[];
 }
@@ -39,16 +55,42 @@ function StatusBadge({ status }: { status: string }) {
 export default function BillingPage() {
   const [data, setData] = useState<StripeRevenue | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rateLoading, setRateLoading] = useState(false);
+  const [displayCurrency, setDisplayCurrency] = useState("CAD");
+  const [initialized, setInitialized] = useState(false);
 
+  // Initial load — fetch with no currency param, use whatever the account currency is
   useEffect(() => {
     fetch("/api/stripe/revenue")
       .then((r) => r.json())
       .then((d) => {
         setData(d);
         setLoading(false);
+        if (d?.currency) {
+          setDisplayCurrency(d.currency.toUpperCase());
+        }
+        setInitialized(true);
       })
       .catch(() => setLoading(false));
   }, []);
+
+  // Re-fetch with requested currency once initialized and user changes selection
+  useEffect(() => {
+    if (!initialized) return;
+    setRateLoading(true);
+    fetch(`/api/stripe/revenue?currency=${displayCurrency}`)
+      .then((r) => r.json())
+      .then((d) => setData(d))
+      .catch(() => {})
+      .finally(() => setRateLoading(false));
+  }, [displayCurrency, initialized]);
+
+  const sym = CURRENCIES.find((c) => c.code === displayCurrency)?.symbol ?? displayCurrency;
+
+  function fmt(amount: number) {
+    const decimals = displayCurrency === "JPY" ? 0 : 2;
+    return `${sym}${amount.toLocaleString("en-CA", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+  }
 
   if (loading) {
     return (
@@ -125,10 +167,10 @@ export default function BillingPage() {
   }
 
   const statCards = [
-    { label: "Revenue (30 days)", value: `$${data.revenue30d.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, color: "text-success", bg: "bg-success/8" },
-    { label: "Revenue (90 days)", value: `$${data.revenue90d.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, color: "text-accent", bg: "bg-accent/8" },
-    { label: "MRR (Subscriptions)", value: `$${data.mrr.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, color: "text-warning", bg: "bg-warning/8" },
-    { label: "Stripe Balance", value: `$${data.available.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${data.currency}`, color: "text-info", bg: "bg-info/8" },
+    { label: "Revenue (30 days)", value: fmt(data.revenue30d), color: "text-success", bg: "bg-success/8" },
+    { label: "Revenue (90 days)", value: fmt(data.revenue90d), color: "text-accent", bg: "bg-accent/8" },
+    { label: "MRR (Subscriptions)", value: fmt(data.mrr), color: "text-warning", bg: "bg-warning/8" },
+    { label: "Stripe Balance", value: fmt(data.available), color: "text-info", bg: "bg-info/8" },
   ];
 
   return (
@@ -140,14 +182,36 @@ export default function BillingPage() {
             {data.subscriptionCount} active subscription{data.subscriptionCount !== 1 ? "s" : ""} · Live Stripe data
           </p>
         </div>
-        <a
-          href="https://dashboard.stripe.com/payments"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-ghost text-[12px]"
-        >
-          Open Stripe ↗
-        </a>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <select
+              value={displayCurrency}
+              onChange={(e) => setDisplayCurrency(e.target.value)}
+              className="input-field pr-8 text-[13px] cursor-pointer"
+              style={{ minWidth: 180 }}
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+          {displayCurrency !== (data.accountCurrency ?? data.currency).toUpperCase() && !rateLoading && data.exchangeRate && (
+            <span className="text-[11px] text-muted whitespace-nowrap">
+              1 {(data.accountCurrency ?? data.currency).toUpperCase()} = {data.exchangeRate.toFixed(4)} {displayCurrency}
+            </span>
+          )}
+          {rateLoading && (
+            <span className="text-[11px] text-muted whitespace-nowrap animate-pulse">fetching rate…</span>
+          )}
+          <a
+            href="https://dashboard.stripe.com/payments"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-ghost text-[12px]"
+          >
+            Open Stripe ↗
+          </a>
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -195,7 +259,10 @@ export default function BillingPage() {
                       <span className="truncate block" title={charge.description ?? ""}>{charge.description || "—"}</span>
                     </td>
                     <td className="font-mono font-medium text-foreground">
-                      ${charge.amount.toFixed(2)} {charge.currency}
+                      {fmt(charge.amount)}
+                      {charge.nativeCurrency !== displayCurrency && (
+                        <span className="text-[10px] text-muted ml-1">({charge.nativeCurrency} {charge.nativeAmount.toFixed(2)})</span>
+                      )}
                     </td>
                     <td>
                       <StatusBadge status={charge.status} />

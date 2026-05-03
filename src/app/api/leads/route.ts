@@ -21,15 +21,67 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { name, email, phone, business, message, source } = body;
 
-  if (!name || !email) {
-    return NextResponse.json({ error: "Name and email are required" }, { status: 400 });
+  // Bulk insert: accept an array
+  if (Array.isArray(body)) {
+    const inserts = body
+      .filter((l) => l.name || l.business)
+      .map((l) => ({
+        name: l.name || l.business,
+        email: l.email || null,
+        phone: l.phone || null,
+        business: l.business || null,
+        message: l.message || l.notes || null,
+        source: l.source || "csv_import",
+        websiteUrl: l.websiteUrl || null,
+        industry: l.industry || null,
+        linkedinUrl: l.linkedinUrl || null,
+        status: "new",
+      }));
+
+    if (inserts.length === 0) {
+      return NextResponse.json({ error: "No valid leads in array" }, { status: 400 });
+    }
+
+    const withEmail = inserts.filter((l) => l.email);
+    const withoutEmail = inserts.filter((l) => !l.email);
+
+    const results = await Promise.all([
+      withEmail.length > 0
+        ? supabase.from("Lead").upsert(withEmail, { onConflict: "email", ignoreDuplicates: false }).select()
+        : Promise.resolve({ data: [], error: null }),
+      withoutEmail.length > 0
+        ? supabase.from("Lead").insert(withoutEmail).select()
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    const err = results.find((r) => r.error)?.error;
+    if (err) return NextResponse.json({ error: err.message }, { status: 500 });
+
+    const saved = (results[0].data?.length ?? 0) + (results[1].data?.length ?? 0);
+    return NextResponse.json({ imported: saved, total: inserts.length }, { status: 201 });
+  }
+
+  // Single insert
+  const { name, email, phone, business, message, source, websiteUrl, industry, linkedinUrl, notes } = body;
+
+  if (!name && !business) {
+    return NextResponse.json({ error: "Name or business is required" }, { status: 400 });
   }
 
   const { data: lead, error } = await supabase
     .from("Lead")
-    .insert({ name, email, phone, business, message, source: source || "admin" })
+    .insert({
+      name: name || business,
+      email: email || null,
+      phone: phone || null,
+      business: business || null,
+      message: message || notes || null,
+      source: source || "admin",
+      websiteUrl: websiteUrl || null,
+      industry: industry || null,
+      linkedinUrl: linkedinUrl || null,
+    })
     .select()
     .single();
 

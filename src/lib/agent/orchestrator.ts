@@ -312,6 +312,15 @@ export async function executeRun(runId: string): Promise<void> {
           const data = prevResult.data as Record<string, unknown>;
           if (data.clients && Array.isArray(data.clients) && data.clients.length > 0) {
             input[key] = (data.clients[0] as Record<string, string>).id;
+          } else if (data.clients && Array.isArray(data.clients) && data.clients.length === 0) {
+            // No client found — fail early with a helpful message
+            await supabase.from("AgentRun").update({
+              status: "failed",
+              errorJson: JSON.stringify({ step: i, toolName: step.toolName, error: "No matching client found. Try using the exact client name or email." }),
+              resultSummary: "No matching client found. Try using the exact client name or email address.",
+              completedAt: new Date().toISOString(),
+            }).eq("id", runId);
+            return;
           } else if (data.id) {
             input[key] = data.id;
           }

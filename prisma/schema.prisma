@@ -21,17 +21,23 @@ model User {
 }
 
 model Lead {
-  id        String   @id @default(cuid())
-  name      String
-  email     String
-  phone     String?
-  business  String?
-  message   String?
-  source    String   @default("website")
-  status    String   @default("new") // new, contacted, qualified, converted, lost
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  business    String?
+  websiteUrl  String?
+  industry    String?
+  linkedinUrl String?
+  message     String?
+  source      String    @default("website")
+  status      String    @default("new") // new, contacted, qualified, converted, lost
+  notes       String?
+  analysis    Json?     // digital footprint analysis from AI
+  pitchDraft  String?   // AI-generated pitch email HTML
+  pitchSentAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model Client {
@@ -42,6 +48,7 @@ model Client {
   business    String
   website     String?
   plan        String    @default("SignalCore")
+  clientType  String    @default("monthly") // monthly, one_off
   status      String    @default("active") // active, paused, churned
   monthlyRate Float     @default(0)
   startDate   DateTime  @default(now())
@@ -52,16 +59,30 @@ model Client {
 }
 
 model Invoice {
-  id          String   @id @default(cuid())
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  description String?
-  amount      Float
-  status      String   @default("pending") // pending, paid, overdue
-  dueDate     DateTime
-  paidAt      DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String    @id @default(cuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  description   String?
+  amount        Float
+  status        String    @default("pending") // pending, paid, overdue
+  paymentSource String?   // stripe, manual — set when paid
+  dueDate       DateTime
+  paidAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  payments      Payment[]
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount    Float
+  method    String   @default("cash") // cash, e_transfer, cheque, bank, stripe, other
+  reference String?  // cheque #, e-transfer confirmation, etc.
+  notes     String?
+  paidAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 }
 
 model Service {

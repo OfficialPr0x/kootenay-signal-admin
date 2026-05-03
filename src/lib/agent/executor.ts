@@ -433,12 +433,15 @@ const TOOL_EXECUTORS: Record<string, (input: ToolInput) => Promise<ToolResult>> 
   },
 
   async create_invoice_draft(input) {
-    const { data: client } = await supabase.from("Client").select("*").eq("id", input.clientId as string).single();
-    if (!client) return { success: false, error: "Client not found" };
+    const clientId = input.clientId as string;
+    if (!clientId || clientId.startsWith("__FROM_STEP_")) {
+      return { success: false, error: "No client was found to create an invoice for. Try specifying the exact client name or email." };
+    }
+    const { data: client } = await supabase.from("Client").select("*").eq("id", clientId).single();
+    if (!client) return { success: false, error: "Client not found — check the name is correct and the client exists in the system." };
 
     const amount = (input.amount as number) || client.monthlyRate;
     const dueDate = input.dueDate ? new Date(input.dueDate as string) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
     const { data: invoice } = await supabase.from("Invoice").insert({
       clientId: client.id,
       amount,

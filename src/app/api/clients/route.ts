@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { name, email, phone, business, website, plan, monthlyRate, notes } = body;
+  const { name, email, phone, business, website, plan, clientType, monthlyRate, notes } = body;
 
   if (!name || !email || !business) {
     return NextResponse.json({ error: "Name, email, and business are required" }, { status: 400 });
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
   const { data: client, error } = await supabase
     .from("Client")
-    .insert({ name, email, phone, business, website, plan, monthlyRate: monthlyRate || 0, notes })
+    .insert({ name, email, phone, business, website, plan, clientType: clientType || "monthly", monthlyRate: monthlyRate || 0, notes })
     .select()
     .single();
 
