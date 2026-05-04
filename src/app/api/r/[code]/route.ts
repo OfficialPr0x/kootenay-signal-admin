@@ -38,24 +38,22 @@ export async function GET(
   const referer = request.headers.get("referer") || null;
 
   // Fire-and-forget — don't block the redirect
-  supabase
-    .from("QrCodeClick")
-    .insert({
-      qrCodeId: qr.id,
-      ipAddress: ip,
-      userAgent,
-      referer,
-      country,
-      city,
-      region,
-    })
-    .then(() => {
-      // Also bump the totalClicks counter
-      return supabase.rpc("increment_qr_clicks", { qr_id: qr.id });
-    })
-    .catch(() => {
+  void (async () => {
+    try {
+      await supabase.from("QrCodeClick").insert({
+        qrCodeId: qr.id,
+        ipAddress: ip,
+        userAgent,
+        referer,
+        country,
+        city,
+        region,
+      });
+      await supabase.rpc("increment_qr_clicks", { qr_id: qr.id });
+    } catch {
       // Non-fatal
-    });
+    }
+  })();
 
   // Redirect
   const destination = qr.destination.startsWith("http")
