@@ -1,10 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Webhook } from "svix";
 import { supabase } from "@/lib/db";
 
 // Resend inbound webhook - receives incoming emails
 // Configure in Resend dashboard: https://resend.com/webhooks
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const rawBody = await request.text();
+
+  // Verify Resend webhook signature if secret is configured
+  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  if (secret) {
+    const svixId = request.headers.get("svix-id");
+    const svixTimestamp = request.headers.get("svix-timestamp");
+    const svixSignature = request.headers.get("svix-signature");
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      return NextResponse.json({ error: "Missing svix headers" }, { status: 401 });
+    }
+    try {
+      const wh = new Webhook(secret);
+      wh.verify(rawBody, { "svix-id": svixId, "svix-timestamp": svixTimestamp, "svix-signature": svixSignature });
+    } catch {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    }
+  }
+
+  const body = JSON.parse(rawBody);
 
   // Resend sends inbound emails with these fields
   const {
@@ -21,8 +41,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid inbound payload" }, { status: 400 });
   }
 
-  const fromEmail = typeof from === "string" ? from : from.email || from;
-  const fromName = typeof from === "object" ? from.name : undefined;
+  // Parse "Name <email@domain.com>" or plain "email@domain.com"
+  let fromEmail: string;
+  let fromName: string | undefined;
+  if (typeof from === "object") {
+    fromEmail = from.email || from;
+    fromName = from.name;
+  } else {
+    const match = (from as string).match(/^(.*?)\s*<(.+?)>$/);
+    if (match) {
+      fromName = match[1].trim() || undefined;
+      fromEmail = match[2].trim();
+    } else {
+      fromEmail = (from as string).trim();
+    }
+  }
   const toEmail = Array.isArray(to) ? to.join(", ") : to;
 
   // Extract thread info from headers

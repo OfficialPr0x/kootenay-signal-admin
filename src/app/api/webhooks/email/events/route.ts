@@ -1,11 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Webhook } from "svix";
 import { supabase } from "@/lib/db";
 
 // Resend delivery events webhook
 // Events: email.sent, email.delivered, email.opened, email.clicked, email.bounced, email.complained
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const rawBody = await request.text();
 
+  // Verify Resend webhook signature if secret is configured
+  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  if (secret) {
+    const svixId = request.headers.get("svix-id");
+    const svixTimestamp = request.headers.get("svix-timestamp");
+    const svixSignature = request.headers.get("svix-signature");
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      return NextResponse.json({ error: "Missing svix headers" }, { status: 401 });
+    }
+    try {
+      const wh = new Webhook(secret);
+      wh.verify(rawBody, { "svix-id": svixId, "svix-timestamp": svixTimestamp, "svix-signature": svixSignature });
+    } catch {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    }
+  }
+
+  const body = JSON.parse(rawBody);
   const { type, data } = body;
 
   if (!type || !data) {
