@@ -7,12 +7,13 @@ const secret = new TextEncoder().encode(process.env.AUTH_SECRET || "fallback-sec
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow login page, auth routes, and cron endpoint (self-authed via CRON_SECRET)
+  // Allow login page, auth routes, cron endpoint, and public QR tracking redirects
   if (
     pathname === "/login" ||
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/setup" ||
-    pathname === "/api/warmup/cron"
+    pathname === "/api/warmup/cron" ||
+    pathname.startsWith("/api/r/")
   ) {
     return NextResponse.next();
   }
